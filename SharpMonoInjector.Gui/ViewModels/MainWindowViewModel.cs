@@ -1,6 +1,4 @@
-﻿using Microsoft.Win32;
-using SharpMonoInjector.Gui.Models;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -8,6 +6,8 @@ using System.IO;
 using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows;
+using Microsoft.Win32;
+using SharpMonoInjector.Gui.Models;
 
 namespace SharpMonoInjector.Gui.ViewModels;
 
@@ -52,7 +52,7 @@ public partial class MainWindowViewModel : ViewModel
             var cp = Environment.ProcessId;
             foreach (var p in Process.GetProcesses()) try
             {
-                if (GetProcessUser(p) != null && p.Id != cp)
+                if (GetProcessUser(p) is not null && p.Id != cp)
                 {
                     nint handle;
                     if ((handle = Native.OpenProcess(ProcessAccessRights.PROCESS_QUERY_INFORMATION | ProcessAccessRights.PROCESS_VM_READ, false, p.Id)) != 0)
@@ -81,10 +81,10 @@ public partial class MainWindowViewModel : ViewModel
         });
 
         Processes = processes;
-        if (_processes.Count > 0)
+        if (processes.Count > 0)
         {
             Status = "Processes refreshed";
-            SelectedProcess = _processes[0];
+            SelectedProcess = processes[0];
         }
         else
         {
@@ -119,9 +119,9 @@ public partial class MainWindowViewModel : ViewModel
                 return;
             }
         }
-        catch (Exception ex)
+        catch (Exception e)
         {
-            Status = "Error: " + ex.Message;
+            Status = "Error: " + e.Message;
             return;
         }
 
@@ -206,158 +206,158 @@ public partial class MainWindowViewModel : ViewModel
 
     #region XML Props
 
-    bool _isRefreshing;
+    bool isRefreshing;
     public bool IsRefreshing
     {
-        get => _isRefreshing;
+        get => isRefreshing;
         set
         {
-            Set(ref _isRefreshing, value);
+            Set(ref isRefreshing, value);
             RefreshCommand.RaiseCanExecuteChanged();
         }
     }
 
-    bool _isExecuting;
+    bool isExecuting;
     public bool IsExecuting
     {
-        get => _isExecuting;
+        get => isExecuting;
         set
         {
-            Set(ref _isExecuting, value);
+            Set(ref isExecuting, value);
             InjectCommand.RaiseCanExecuteChanged();
             EjectCommand.RaiseCanExecuteChanged();
         }
     }
 
-    List<MonoProcess> _processes;
+    List<MonoProcess> processes;
     public List<MonoProcess> Processes
     {
-        get => _processes;
-        set => Set(ref _processes, value);
+        get => processes;
+        set => Set(ref processes, value);
     }
 
-    MonoProcess _selectedProcess;
+    MonoProcess selectedProcess;
     public MonoProcess SelectedProcess
     {
-        get => _selectedProcess;
+        get => selectedProcess;
         set
         {
-            _selectedProcess = value;
+            selectedProcess = value;
             InjectCommand.RaiseCanExecuteChanged();
         }
     }
 
-    string _status;
+    string status;
     public string Status
     {
-        get => _status;
-        set => Set(ref _status, value);
+        get => status;
+        set => Set(ref status, value);
     }
 
-    bool _avalert;
+    bool avalert;
     public bool AVAlert
     {
-        get => _avalert;
-        set => Set(ref _avalert, value);
+        get => avalert;
+        set => Set(ref avalert, value);
     }
 
-    string _avcolor;
+    string avcolor;
     public string AVColor
     {
-        get => _avcolor;
-        set => Set(ref _avcolor, value);
+        get => avcolor;
+        set => Set(ref avcolor, value);
     }
 
-    string _assemblyPath;
+    string assemblyPath;
     public string AssemblyPath
     {
-        get => _assemblyPath;
+        get => assemblyPath;
         set
         {
-            Set(ref _assemblyPath, value);
-            if (File.Exists(_assemblyPath)) InjectNamespace = Path.GetFileNameWithoutExtension(_assemblyPath);
+            Set(ref assemblyPath, value);
+            if (File.Exists(assemblyPath)) InjectNamespace = Path.GetFileNameWithoutExtension(assemblyPath);
             InjectCommand.RaiseCanExecuteChanged();
         }
     }
 
-    string _injectNamespace;
+    string injectNamespace;
     public string InjectNamespace
     {
-        get => _injectNamespace;
+        get => injectNamespace;
         set
         {
-            Set(ref _injectNamespace, value);
+            Set(ref injectNamespace, value);
             EjectNamespace = value;
         }
     }
 
-    string _injectClassName;
+    string injectClassName;
     public string InjectClassName
     {
-        get => _injectClassName;
+        get => injectClassName;
         set
         {
-            Set(ref _injectClassName, value);
+            Set(ref injectClassName, value);
             EjectClassName = value;
             InjectCommand.RaiseCanExecuteChanged();
         }
     }
 
-    string _injectMethodName;
+    string injectMethodName;
     public string InjectMethodName
     {
-        get => _injectMethodName;
+        get => injectMethodName;
         set
         {
-            Set(ref _injectMethodName, value);
-            if (_injectMethodName == "Load") EjectMethodName = "Unload";
+            Set(ref injectMethodName, value);
+            if (injectMethodName == "Load") EjectMethodName = "Unload";
             InjectCommand.RaiseCanExecuteChanged();
         }
     }
 
-    ObservableCollection<InjectedAssembly> _injectedAssemblies = [];
+    ObservableCollection<InjectedAssembly> injectedAssemblies = [];
     public ObservableCollection<InjectedAssembly> InjectedAssemblies
     {
-        get => _injectedAssemblies;
-        set => Set(ref _injectedAssemblies, value);
+        get => injectedAssemblies;
+        set => Set(ref injectedAssemblies, value);
     }
 
-    InjectedAssembly _selectedAssembly;
+    InjectedAssembly selectedAssembly;
     public InjectedAssembly SelectedAssembly
     {
-        get => _selectedAssembly;
+        get => selectedAssembly;
         set
         {
-            Set(ref _selectedAssembly, value);
+            Set(ref selectedAssembly, value);
             EjectCommand.RaiseCanExecuteChanged();
         }
     }
 
-    string _ejectNamespace;
+    string ejectNamespace;
     public string EjectNamespace
     {
-        get => _ejectNamespace;
-        set => Set(ref _ejectNamespace, value);
+        get => ejectNamespace;
+        set => Set(ref ejectNamespace, value);
     }
 
-    string _ejectClassName;
+    string ejectClassName;
     public string EjectClassName
     {
-        get => _ejectClassName;
+        get => ejectClassName;
         set
         {
-            Set(ref _ejectClassName, value);
+            Set(ref ejectClassName, value);
             EjectCommand.RaiseCanExecuteChanged();
         }
     }
 
-    string _ejectMethodName;
+    string ejectMethodName;
     public string EjectMethodName
     {
-        get => _ejectMethodName;
+        get => ejectMethodName;
         set
         {
-            Set(ref _ejectMethodName, value);
+            Set(ref ejectMethodName, value);
             EjectCommand.RaiseCanExecuteChanged();
         }
     }

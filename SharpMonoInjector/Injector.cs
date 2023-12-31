@@ -76,8 +76,8 @@ public class Injector : IDisposable
     }
     public Injector(nint processHandle, nint monoModule)
     {
-        if ((_handle = processHandle) == 0) throw new ArgumentException("Argument cannot be zero", nameof(processHandle));
-        if ((_mono = monoModule) == 0) throw new ArgumentException("Argument cannot be zero", nameof(monoModule));
+        if ((_handle = processHandle) == 0) throw new ArgumentNullException(nameof(processHandle), "Handle cannot be zero");
+        if ((_mono = monoModule) == 0) throw new ArgumentNullException(nameof(monoModule), "Handle cannot be zero");
 
         Is64Bit = ProcessUtils.Is64BitProcess(_handle);
         _memory = new(_handle);
@@ -114,6 +114,7 @@ public class Injector : IDisposable
         method = GetMethodFromName(@class, methodName);
         RuntimeInvoke(method);
 
+        _attach = false;
         return assembly;
     }
     public void Eject(nint assembly, string @namespace, string className, string methodName)
@@ -134,6 +135,7 @@ public class Injector : IDisposable
         RuntimeInvoke(method);
 
         CloseAssembly(assembly);
+        _attach = false;
     }
 
     static void ThrowIfNull(nint ptr, string methodName)

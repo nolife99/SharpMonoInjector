@@ -34,8 +34,8 @@ static class Program
         }
         Injector injector;
 
-        if (cla.GetIntArg("-p", out int pid)) injector = new Injector(pid);
-        else if (cla.GetStringArg("-p", out var pname)) injector = new Injector(pname);
+        if (cla.GetIntArg("-p", out int pid)) injector = new(pid);
+        else if (cla.GetStringArg("-p", out var pname)) injector = new(pname);
         else
         {
             System.Console.WriteLine("No process id/name specified");
@@ -123,8 +123,8 @@ static class Program
     {
         nint assembly;
 
-        if (args.GetIntArg("-a", out int nint)) assembly = nint;
-        else if (args.GetLongArg("-a", out long longPtr)) assembly = (nint)longPtr;
+        if (args.GetIntArg("-a", out var nint)) assembly = nint;
+        else if (args.GetLongArg("-a", out var longPtr)) assembly = (nint)longPtr;
         else
         {
             System.Console.WriteLine("No assembly pointer specified");

@@ -1,6 +1,4 @@
-﻿using Microsoft.Win32;
-using System;
-using System.Buffers;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -9,6 +7,7 @@ using System.Linq;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
+using Microsoft.Win32;
 
 namespace SharpMonoInjector;
 
@@ -36,46 +35,36 @@ public static partial class ProcessUtils
             if (address != 0) yield return new(memory.ReadString(mod + memory.Read<int>(names + i * 4), 32, Encoding.ASCII), address);
         }
     }
-    public static bool GetMonoModule(nint handle, out nint monoModule)
+    public unsafe static bool GetMonoModule(nint handle, out nint monoModule)
     {
-        nint[] ptrs = [];
-        if (!Native.EnumProcessModulesEx(handle, ptrs, 0, out int bytesNeeded, ModuleFilter.LIST_MODULES_ALL))
+        if (!Native.EnumProcessModulesEx(handle, 0, 0, out int bytesNeeded, ModuleFilter.LIST_MODULES_ALL))
             throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
 
         var count = bytesNeeded / nint.Size;
-        ptrs = ArrayPool<nint>.Shared.Rent(count);
+        var ptrs = stackalloc nint[count];
 
-        try
+        if (!Native.EnumProcessModulesEx(handle, (nint)ptrs, bytesNeeded, out bytesNeeded, ModuleFilter.LIST_MODULES_ALL))
+            throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
+
+        var path = stackalloc sbyte[260 * Marshal.SizeOf<char>()];
+        for (var i = 0; i < count; ++i) try
         {
-            if (!Native.EnumProcessModulesEx(handle, ptrs, bytesNeeded, out bytesNeeded, ModuleFilter.LIST_MODULES_ALL))
-                throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
-
-            for (var i = 0; i < count; ++i) try
+            _ = Native.GetModuleFileNameEx(handle, ptrs[i], (nint)path, 260);
+            if (new string(path, 0, 260).IndexOf("mono", StringComparison.OrdinalIgnoreCase) > -1)
             {
-                StringBuilder path = new(260);
-                _ = Native.GetModuleFileNameEx(handle, ptrs[i], path, 260);
+                if (!Native.GetModuleInformation(handle, ptrs[i], out var info, (uint)(nint.Size * count)))
+                    throw new InjectorException("Failed to get module information", new Win32Exception(Marshal.GetLastWin32Error()));
 
-                if (path.ToString().IndexOf("mono", StringComparison.OrdinalIgnoreCase) > -1)
+                if (GetExportedFunctions(handle, info.lpBaseOfDll).Any(f => f.Name == "mono_get_root_domain"))
                 {
-                    if (!Native.GetModuleInformation(handle, ptrs[i], out var info, (uint)(nint.Size * ptrs.Length)))
-                        throw new InjectorException("Failed to get module information", new Win32Exception(Marshal.GetLastWin32Error()));
-
-                    var funcs = GetExportedFunctions(handle, info.lpBaseOfDll);
-                    if (funcs.Any(f => f.Name == "mono_get_root_domain"))
-                    {
-                        monoModule = info.lpBaseOfDll;
-                        return true;
-                    }
+                    monoModule = info.lpBaseOfDll;
+                    return true;
                 }
             }
-            catch (Exception e)
-            {
-                File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "[ProcessUtils] GetMono - ERROR: " + e.Message + "\r\n");
-            }
         }
-        finally
+        catch (Exception e)
         {
-            ArrayPool<nint>.Shared.Return(ptrs);
+            File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "[ProcessUtils] GetMono - ERROR: " + e.Message + "\r\n");
         }
 
         monoModule = 0;

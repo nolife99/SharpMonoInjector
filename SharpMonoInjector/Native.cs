@@ -1,13 +1,14 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace SharpMonoInjector;
 
 [StructLayout(LayoutKind.Sequential)] public struct MODULEINFO
 {
-    public nint lpBaseOfDll, EntryPoint;
+    public nint lpBaseOfDll;
     public int SizeOfImage;
+    public nint EntryPoint;
 }
 public enum ModuleFilter : uint
 {
@@ -88,38 +89,50 @@ public enum MonoImageOpenStatus
 public static class Native
 {
     [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static extern nint OpenProcess(ProcessAccessRights dwDesiredAccess, bool bInheritHandle, int processId);
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static extern bool CloseHandle(nint handle);
 
     [DllImport("advapi32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static extern bool OpenProcessToken(nint ProcessHandle, uint DesiredAccess, out nint TokenHandle);
 
     [DllImport("psapi.dll", SetLastError = true)]
-    public static extern bool EnumProcessModulesEx(nint hProcess, nint[] lphModule, int cb, out int lpcbNeeded, ModuleFilter dwFilterFlag);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static extern bool EnumProcessModulesEx(nint hProcess, nint lphModule, int cb, out int lpcbNeeded, ModuleFilter dwFilterFlag);
 
     [DllImport("psapi.dll")]
-    public static extern uint GetModuleFileNameEx(nint hProcess, nint hModule, StringBuilder lpBaseName, uint nSize);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static extern uint GetModuleFileNameEx(nint hProcess, nint hModule, nint lpBaseName, uint nSize);
 
     [DllImport("psapi.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static extern bool GetModuleInformation(nint hProcess, nint hModule, out MODULEINFO lpmodinfo, uint cb);
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static extern bool WriteProcessMemory(nint hProcess, nint lpBaseAddress, nint lpBuffer, int nSize, int lpNumberOfBytesWritten = 0);
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static extern bool ReadProcessMemory(nint hProcess, nint lpBaseAddress, nint lpBuffer, int nSize, int lpNumberOfBytesRead = 0);
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static extern nint VirtualAllocEx(nint hProcess, nint lpAddress, int dwSize, AllocationType flAllocationType, MemoryProtection flProtect);
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static extern bool VirtualFreeEx(nint hProcess, nint lpAddress, int dwSize, MemoryFreeType dwFreeType);
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static extern nint CreateRemoteThread(nint hProcess, nint lpThreadAttributes, int dwStackSize, nint lpStartAddress, nint lpParameter, ThreadCreationFlags dwCreationFlags, out int lpThreadId);
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static extern WaitResult WaitForSingleObject(nint hHandle, int dwMilliseconds);
 }

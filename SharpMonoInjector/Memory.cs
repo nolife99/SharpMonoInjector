@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -9,11 +8,11 @@ namespace SharpMonoInjector;
 
 public class Memory(nint handle) : IDisposable
 {
-    readonly List<(nint, int)> _allocations = [];
+    readonly List<(nint, int)> allocs = [];
 
-    public unsafe string ReadString(nint address, int length, Encoding encoding)
+    public string ReadString(nint address, int length, Encoding encoding)
     {
-        var bytes = stackalloc byte[length];
+        Span<byte> bytes = stackalloc byte[length];
         for (var i = 0; i < length; ++i)
         {
             var read = Read<byte>(address + i);
@@ -24,7 +23,7 @@ public class Memory(nint handle) : IDisposable
             }
             bytes[i] = read;
         }
-        return encoding.GetString(bytes, length);
+        return encoding.GetString(bytes[..length]);
     }
     public unsafe T Read<T>(nint address) where T : unmanaged
     {
@@ -50,7 +49,7 @@ public class Memory(nint handle) : IDisposable
         var addr = Native.VirtualAllocEx(handle, 0, size, AllocationType.MEM_COMMIT, MemoryProtection.PAGE_EXECUTE_READWRITE);
         if (addr == 0) throw new InjectorException("Failed to allocate process memory", new Win32Exception(Marshal.GetLastWin32Error()));
 
-        _allocations.Add((addr, size));
+        allocs.Add((addr, size));
         return addr;
     }
     public unsafe void Write(nint addr, ReadOnlySpan<byte> data)
@@ -61,6 +60,7 @@ public class Memory(nint handle) : IDisposable
 
     public void Dispose()
     {
-        foreach (var kvp in _allocations) Native.VirtualFreeEx(handle, kvp.Item1, kvp.Item2, MemoryFreeType.MEM_DECOMMIT);
+        allocs.ForEach(kvp => Native.VirtualFreeEx(handle, kvp.Item1, kvp.Item2, MemoryFreeType.MEM_DECOMMIT));
+        allocs.Clear();
     }
 }
