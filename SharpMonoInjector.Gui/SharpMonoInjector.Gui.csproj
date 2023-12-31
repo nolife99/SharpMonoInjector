@@ -32,8 +32,4 @@
   <ItemGroup>
     <Resource Include="Resources\icon.ico" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
-    <PackageReference Include="System.Management" Version="8.0.0" />
-  </ItemGroup>
 </Project>

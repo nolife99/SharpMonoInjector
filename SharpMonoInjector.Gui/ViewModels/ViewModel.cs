@@ -16,5 +16,5 @@ public abstract class ViewModel : INotifyPropertyChanged
             RaisePropertyChanged(name);
         }
     }
-    protected void RaisePropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    protected void RaisePropertyChanged(string name) => PropertyChanged?.Invoke(this, new(name));
 }
