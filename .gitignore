@@ -298,3 +298,5 @@ __pycache__/
 *.btm.cs
 *.odx.cs
 *.xsd.cs
+Docs
+Built on Net 4.0.txt
