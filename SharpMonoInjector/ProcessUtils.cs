@@ -1,176 +1,207 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
-using Microsoft.Win32;
 
-namespace SharpMonoInjector
-{
-    public static class ProcessUtils
-    {        
-        [DllImport("kernel32.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool IsWow64Process2([In] IntPtr hProcess, [Out] out ushort processMachine, [Out] out ushort nativeMachine);
+namespace SharpMonoInjector;
 
-        private static bool isTargetx64;
+public static partial class ProcessUtils
+{ 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool IsWow64Process2(nint hProcess, out ushort processMachine, out ushort nativeMachine);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool IsWow64Process(IntPtr hProcess, out bool wow64Process);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool IsWow64Process(nint hProcess, out bool wow64Process);
+    static bool isTargetx64;
 
-        public static IEnumerable<ExportedFunction> GetExportedFunctions(IntPtr handle, IntPtr mod)
+    public static IEnumerable<ExportedFunction> GetExportedFunctions(nint handle, nint mod)
+    {
+        using Memory memory = new(handle);
+
+        var exportDir = mod + memory.Read<int>(mod + memory.Read<int>(mod + 0x3C) + 0x18 + (Is64BitProcess(handle) ? 0x70 : 0x60));
+        var names = mod + memory.Read<int>(exportDir + 0x20);
+        var ordinals = mod + memory.Read<int>(exportDir + 0x24);
+        var funcs = mod + memory.Read<int>(exportDir + 0x1C);
+
+        for (var i = 0; i < memory.Read<int>(exportDir + 0x18); ++i)
         {
-            using (Memory memory = new Memory(handle))
-            {
-                int e_lfanew = memory.ReadInt(mod + 0x3C);
-                IntPtr ntHeaders = mod + e_lfanew;
-                IntPtr optionalHeader = ntHeaders + 0x18;
-                IntPtr dataDirectory = optionalHeader + (Is64BitProcess(handle) ? 0x70 : 0x60);
-                IntPtr exportDirectory = mod + memory.ReadInt(dataDirectory);
-                IntPtr names = mod + memory.ReadInt(exportDirectory + 0x20);
-                IntPtr ordinals = mod + memory.ReadInt(exportDirectory + 0x24);
-                IntPtr functions = mod + memory.ReadInt(exportDirectory + 0x1C);
-                int count = memory.ReadInt(exportDirectory + 0x18);
-
-                for (int i = 0; i < count; i++)
-                {
-                    try // Added 8-7-2021 J.E
-                    {
-                        int offset = memory.ReadInt(names + i * 4);
-                        string name = memory.ReadString(mod + offset, 32, Encoding.ASCII);
-                        short ordinal = memory.ReadShort(ordinals + i * 2);
-                        IntPtr address = mod + memory.ReadInt(functions + ordinal * 4);
-
-                        if (address != IntPtr.Zero)
-                        {
-                            yield return new ExportedFunction(name, address);
-                        }
-                    }
-                    finally { }
-                }
-            }
+            var address = mod + memory.Read<int>(funcs + memory.Read<short>(ordinals + i * 2) * 4);
+            if (address != 0) yield return new(memory.ReadString(mod + memory.Read<int>(names + i * 4), 32, Encoding.ASCII), address);
         }
+    }
+    public static bool GetMonoModule(nint handle, out nint monoModule)
+    {
+        nint[] ptrs = [];
+        if (!Native.EnumProcessModulesEx(handle, ptrs, 0, out int bytesNeeded, ModuleFilter.LIST_MODULES_ALL))
+            throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
 
-        public static bool GetMonoModule(IntPtr handle, out IntPtr monoModule)
+        var count = bytesNeeded / nint.Size;
+        ptrs = ArrayPool<nint>.Shared.Rent(count);
+
+        try
         {
-            int size = Is64BitProcess(handle) ? 8 : 4;
-
-            IntPtr[] ptrs = new IntPtr[0];
-
-            if (!Native.EnumProcessModulesEx(handle, ptrs, 0, out int bytesNeeded, ModuleFilter.LIST_MODULES_ALL))
-            {
-                throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
-            }
-
-            int count = bytesNeeded / size;
-            ptrs = new IntPtr[count];
-
             if (!Native.EnumProcessModulesEx(handle, ptrs, bytesNeeded, out bytesNeeded, ModuleFilter.LIST_MODULES_ALL))
-            {
                 throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
-            }
 
-            for (int i = 0; i < count; i++)
+            for (var i = 0; i < count; ++i) try
             {
-                try
+                StringBuilder path = new(260);
+                _ = Native.GetModuleFileNameEx(handle, ptrs[i], path, 260);
+
+                if (path.ToString().IndexOf("mono", StringComparison.OrdinalIgnoreCase) > -1)
                 {
-                    StringBuilder path = new StringBuilder(260);
-                    Native.GetModuleFileNameEx(handle, ptrs[i], path, 260);
+                    if (!Native.GetModuleInformation(handle, ptrs[i], out var info, (uint)(nint.Size * ptrs.Length)))
+                        throw new InjectorException("Failed to get module information", new Win32Exception(Marshal.GetLastWin32Error()));
 
-                    if (path.ToString().IndexOf("mono", StringComparison.OrdinalIgnoreCase) > -1)
+                    var funcs = GetExportedFunctions(handle, info.lpBaseOfDll);
+                    if (funcs.Any(f => f.Name == "mono_get_root_domain"))
                     {
-                        if (!Native.GetModuleInformation(handle, ptrs[i], out MODULEINFO info, (uint)(size * ptrs.Length)))
-                        {
-                            throw new InjectorException("Failed to get module information", new Win32Exception(Marshal.GetLastWin32Error()));
-                        }
-
-                        var funcs = GetExportedFunctions(handle, info.lpBaseOfDll);
-
-                        if (funcs.Any(f => f.Name == "mono_get_root_domain"))
-                        {
-                            monoModule = info.lpBaseOfDll;
-                            return true;
-                        }
+                        monoModule = info.lpBaseOfDll;
+                        return true;
                     }
                 }
-                catch (Exception ex) { File.AppendAllText(AppDomain.CurrentDomain.BaseDirectory + "\\DebugLog.txt", "[ProcessUtils] GetMono - ERROR: " + ex.Message + "\r\n"); }
             }
-
-            monoModule = IntPtr.Zero;
-            return false;
+            catch (Exception e)
+            {
+                File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "[ProcessUtils] GetMono - ERROR: " + e.Message + "\r\n");
+            }
         }
-
-        public static bool Is64BitProcess(IntPtr handle)
+        finally
         {
-            try
-            {
-                if (!Environment.Is64BitOperatingSystem) { return false; }
-
-                string OSVer = (string)Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion", "ProductName", null);
-                Console.WriteLine(OSVer);
-
-                if(OSVer.Contains("Windows 10"))
-                {
-                    #region[Win10]
-            
-                    isTargetx64 = false;
-
-                    if (handle != IntPtr.Zero)
-                    {
-                        ushort pMachine = 0;
-                        ushort nMachine = 0;
-
-                        try
-                        {
-                            if (!IsWow64Process2(handle, out pMachine, out nMachine))
-                            {
-                                //handle error
-                            }
-
-                            if (pMachine == 332)
-                            {
-                                isTargetx64 = false;
-                            }
-                            else
-                            {
-                                isTargetx64 = true;
-
-                            }
-
-                            return isTargetx64;
-                        }
-                        catch { /* Will try the Win7 method */ }
-                    }
-            
-                    #endregion
-                }
-
-                #region[Win7]
-
-                IsWow64Process(handle, out bool isTargetWOWx64);
-
-                if (isTargetWOWx64)
-                {
-                    return false; // It is WOW64 so it's a 32-bit process
-                }
-                else 
-                {
-                    return true; // It's not a WOW64 process so 64-bit process, and we already check if OS is 32 or 64 bit.
-                }
-
-                #endregion
-
-
-                //ORIG
-                //if (!IsWow64Process(handle, out bool is64bit))
-                //{
-                //    return IntPtr.Size == 8; // assume it's the same as the current process */ 
-                //}
-            }
-            catch (Exception ex) { File.AppendAllText(AppDomain.CurrentDomain.BaseDirectory + "\\DebugLog.txt", "[ProcessUtils] is64Bit - ERROR: " + ex.Message + "\r\n"); }
-            return true;
+            ArrayPool<nint>.Shared.Return(ptrs);
         }
+
+        monoModule = 0;
+        return false;
+    }
+    public static bool Is64BitProcess(nint handle)
+    {
+        try
+        {
+            if (!Environment.Is64BitOperatingSystem) return false;
+
+            var OSVer = (string)Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion", "ProductName", null);
+            Console.WriteLine(OSVer);
+
+            if (OSVer.Contains("Windows 10"))
+            {
+                #region Win10
+        
+                isTargetx64 = false;
+                if (handle != 0)
+                {
+                    ushort pMachine = 0, nMachine = 0;
+                    try
+                    {
+                        if (!IsWow64Process2(handle, out pMachine, out nMachine)) { /*handle error*/ }
+
+                        if (pMachine == 332) isTargetx64 = false;
+                        else isTargetx64 = true;
+
+                        return isTargetx64;
+                    }
+                    catch { /* Will try the Win7 method */ }
+                }
+        
+                #endregion
+            }
+
+            #region Win7
+
+            IsWow64Process(handle, out bool isTargetWOWx64);
+            return !isTargetWOWx64;
+
+            #endregion  
+        }
+        catch (Exception e) 
+        { 
+            File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "[ProcessUtils] is64Bit - ERROR: " + e.Message + "\r\n"); 
+        }
+        return true;
+    }
+    public static bool AntivirusInstalled()
+    {
+        #region Pre-Windows 7
+        /* 
+        try
+        {
+            var defenderFlag = false;
+            var wmipathstr = @"\\" + Environment.MachineName + @"\root\SecurityCenter";
+
+            var searcher = new ManagementObjectSearcher(wmipathstr, "SELECT * FROM AntivirusProduct");
+            var instances = searcher.Get();
+
+            if (instances.Count > 0)
+            {
+                File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: True\r\n");
+                var installedAVs = "Installed AntiVirus':\r\n";
+
+                foreach (var av in instances)
+                {
+                    installedAVs += av.GetText(TextFormat.WmiDtd20) + "\r\n";
+                    var AVInstalled = ((string)av.GetPropertyValue("pathToSignedProductExe")).Replace("//", "") + " " + (string)av.GetPropertyValue("pathToSignedReportingExe");
+                    installedAVs += "   " + AVInstalled + "\r\n";
+
+                    if (((string)av.GetPropertyValue("pathToSignedProductExe")).StartsWith("windowsdefender") && ((string)av.GetPropertyValue("pathToSignedReportingExe")).EndsWith("Windows Defender\\MsMpeng.exe")) defenderFlag = true;
+                }
+                File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", installedAVs + "\r\n");
+            }
+            else File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: False\r\n");
+
+            if (defenderFlag) return false;
+            else return instances.Count > 0;
+        }
+        catch (Exception e)
+        {
+            File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "Error Checking for AV: " + e.Message + "\r\n");
+        }
+        */
+        #endregion
+
+        try
+        {
+            List<string> avs = [];
+            var defenderFlag = false;
+            var wmipathstr = @"\\" + Environment.MachineName + @"\root\SecurityCenter2";
+
+            ManagementObjectSearcher searcher = new(wmipathstr, "SELECT * FROM AntivirusProduct");
+            var instances = searcher.Get();
+
+            if (instances.Count > 0)
+            {
+                File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: True\r\n");
+                var installedAVs = "Installed AntiVirus':\r\n";
+
+                foreach (var av in instances)
+                {
+                    var AVInstalled = ((string)av.GetPropertyValue("pathToSignedProductExe")).Replace("//", "") + " " + (string)av.GetPropertyValue("pathToSignedReportingExe");
+                    installedAVs += "   " + AVInstalled + "\r\n";
+                    avs.Add(AVInstalled.ToLower());
+                }
+                File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", installedAVs + "\r\n");
+            }
+            else File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: False\r\n");
+
+            foreach (var p in Process.GetProcesses()) avs.ForEach(detectedAV =>
+            {
+                if (detectedAV.EndsWith(p.ProcessName.ToLower() + ".exe"))
+                    File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Running: " + detectedAV + "\r\n");
+            });
+
+            if (defenderFlag) return false;
+            else return instances.Count > 0;
+        }
+        catch (Exception e)
+        {
+            File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "Error Checking for AV: " + e.Message + "\r\n");
+        }
+        return false;
     }
 }

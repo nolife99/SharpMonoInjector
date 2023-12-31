@@ -1,0 +1,40 @@
+AntiVirus Installed: True
+Installed AntiVirus':
+   C:\Program Files (x86)\Tencent\QQPCMgr\15.2.22568.219\QQPCMgr.exe C:\Program Files (x86)\Tencent\QQPCMgr\15.2.22568.219\qmbsrv.exe
+   windowsdefender: %ProgramFiles%\Windows Defender\MsMpeng.exe
+   C:\Program Files\Norton Security\Engine\22.21.5.44\WSCStub.exe C:\Program Files\Norton Security\Engine\22.21.5.44\nsWscSvc.exe
+
+AntiVirus Running: c:\program files (x86)\tencent\qqpcmgr\15.2.22568.219\qqpcmgr.exe c:\program files (x86)\tencent\qqpcmgr\15.2.22568.219\qmbsrv.exe
+AntiVirus Running: windowsdefender: %programfiles%\windows defender\msmpeng.exe
+AntiVirus Installed: True
+Installed AntiVirus':
+   C:\Program Files (x86)\Tencent\QQPCMgr\15.2.22568.219\QQPCMgr.exe C:\Program Files (x86)\Tencent\QQPCMgr\15.2.22568.219\qmbsrv.exe
+   windowsdefender: %ProgramFiles%\Windows Defender\MsMpeng.exe
+   C:\Program Files\Norton Security\Engine\22.21.5.44\WSCStub.exe C:\Program Files\Norton Security\Engine\22.21.5.44\nsWscSvc.exe
+
+AntiVirus Running: c:\program files (x86)\tencent\qqpcmgr\15.2.22568.219\qqpcmgr.exe c:\program files (x86)\tencent\qqpcmgr\15.2.22568.219\qmbsrv.exe
+AntiVirus Running: windowsdefender: %programfiles%\windows defender\msmpeng.exe
+AntiVirus Installed: True
+Installed AntiVirus':
+   C:\Program Files (x86)\Tencent\QQPCMgr\15.2.22568.219\QQPCMgr.exe C:\Program Files (x86)\Tencent\QQPCMgr\15.2.22568.219\qmbsrv.exe
+   windowsdefender: %ProgramFiles%\Windows Defender\MsMpeng.exe
+   C:\Program Files\Norton Security\Engine\22.21.5.44\WSCStub.exe C:\Program Files\Norton Security\Engine\22.21.5.44\nsWscSvc.exe
+
+AntiVirus Running: c:\program files (x86)\tencent\qqpcmgr\15.2.22568.219\qqpcmgr.exe c:\program files (x86)\tencent\qqpcmgr\15.2.22568.219\qmbsrv.exe
+AntiVirus Running: windowsdefender: %programfiles%\windows defender\msmpeng.exe
+AntiVirus Installed: True
+Installed AntiVirus':
+   C:\Program Files (x86)\Tencent\QQPCMgr\15.2.22568.219\QQPCMgr.exe C:\Program Files (x86)\Tencent\QQPCMgr\15.2.22568.219\qmbsrv.exe
+   windowsdefender: %ProgramFiles%\Windows Defender\MsMpeng.exe
+   C:\Program Files\Norton Security\Engine\22.21.5.44\WSCStub.exe C:\Program Files\Norton Security\Engine\22.21.5.44\nsWscSvc.exe
+
+AntiVirus Running: c:\program files (x86)\tencent\qqpcmgr\15.2.22568.219\qqpcmgr.exe c:\program files (x86)\tencent\qqpcmgr\15.2.22568.219\qmbsrv.exe
+AntiVirus Running: windowsdefender: %programfiles%\windows defender\msmpeng.exe
+AntiVirus Installed: True
+Installed AntiVirus':
+   C:\Program Files (x86)\Tencent\QQPCMgr\15.2.22568.219\QQPCMgr.exe C:\Program Files (x86)\Tencent\QQPCMgr\15.2.22568.219\qmbsrv.exe
+   windowsdefender: %ProgramFiles%\Windows Defender\MsMpeng.exe
+   C:\Program Files\Norton Security\Engine\22.21.5.44\WSCStub.exe C:\Program Files\Norton Security\Engine\22.21.5.44\nsWscSvc.exe
+
+AntiVirus Running: c:\program files (x86)\tencent\qqpcmgr\15.2.22568.219\qqpcmgr.exe c:\program files (x86)\tencent\qqpcmgr\15.2.22568.219\qmbsrv.exe
+AntiVirus Running: windowsdefender: %programfiles%\windows defender\msmpeng.exe

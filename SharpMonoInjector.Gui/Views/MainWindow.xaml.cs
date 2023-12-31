@@ -1,7 +1,11 @@
-﻿using System;
-using System.Diagnostics;
+﻿using System.Windows;
+using System.Windows.Input;
+
+#if RELEASE
 using System.Security.Principal;
-using System.Windows;
+using System;
+using System.Diagnostics;
+#endif
 
 namespace SharpMonoInjector.Gui.Views
 {
@@ -9,49 +13,29 @@ namespace SharpMonoInjector.Gui.Views
     {
         public MainWindow()
         {
-
-            bool IsElevated = new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
-
 #if RELEASE
-            if (!IsElevated)
+            if (!new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator))
             {
-                string exeName = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
-                ProcessStartInfo startInfo = new ProcessStartInfo(exeName);
-                startInfo.Verb = "runas";
-                System.Diagnostics.Process.Start(startInfo);
-                AppDomain.Unload(AppDomain.CurrentDomain);
+                Process.Start(new ProcessStartInfo(Environment.ProcessPath)
+                {
+                    Verb = "runas",
+                    UseShellExecute = true
+                });
+                Environment.Exit(0);
             }
 #endif
             InitializeComponent();
         }
 
-        #region[Window Events]
+        #region Window Events
 
-        private void Window_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
+        void Window_Exit(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
+        void Window_Minimize(object sender, RoutedEventArgs e) => Application.Current.MainWindow.WindowState = WindowState.Minimized;
+        void Window_Maximize(object sender, RoutedEventArgs e)
         {
-            DragMove();
-        }
-
-        private void Window_Exit(object sender, RoutedEventArgs e)
-        {
-            Application.Current.Shutdown();
-        }
-
-        private void Window_Minimize(object sender, RoutedEventArgs e)
-        {
-            Application.Current.MainWindow.WindowState = WindowState.Minimized;
-        }
-
-        private void Window_Maximize(object sender, RoutedEventArgs e)
-        {
-            if (Application.Current.MainWindow.WindowState == WindowState.Maximized)
-            {
-                Application.Current.MainWindow.WindowState = WindowState.Normal;
-            }
-            else
-            {
-                Application.Current.MainWindow.WindowState = WindowState.Maximized;
-            }
+            if (Application.Current.MainWindow.WindowState is WindowState.Maximized) Application.Current.MainWindow.WindowState = WindowState.Normal;
+            else Application.Current.MainWindow.WindowState = WindowState.Maximized;
         }
 
         #endregion

@@ -1,13 +1,8 @@
-﻿using System;
+﻿namespace SharpMonoInjector.Gui.Models;
 
-namespace SharpMonoInjector.Gui.Models
+public class MonoProcess
 {
-    public class MonoProcess
-    {
-        public IntPtr MonoModule { get; set; }
-
-        public string Name { get; set; }
-
-        public int Id { get; set; }
-    }
+    public nint MonoModule { get; init; }
+    public string Name { get; init; }
+    public int Id { get; init; }
 }

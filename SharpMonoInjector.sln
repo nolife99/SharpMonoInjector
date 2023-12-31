@@ -1,13 +1,13 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27130.2027
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpMonoInjector.Console", "SharpMonoInjector.Console\SharpMonoInjector.Console.csproj", "{E677DE19-10C7-4981-BC7A-F49AE07E3391}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpMonoInjector.Console", "SharpMonoInjector.Console\SharpMonoInjector.Console.csproj", "{E677DE19-10C7-4981-BC7A-F49AE07E3391}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpMonoInjector.Gui", "SharpMonoInjector.Gui\SharpMonoInjector.Gui.csproj", "{AA64466B-D036-47B1-AA77-DB1DAA026313}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpMonoInjector.Gui", "SharpMonoInjector.Gui\SharpMonoInjector.Gui.csproj", "{AA64466B-D036-47B1-AA77-DB1DAA026313}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpMonoInjector", "SharpMonoInjector\SharpMonoInjector.csproj", "{929D5F1D-EE93-4AA2-900C-D9689CBC4DE1}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpMonoInjector", "SharpMonoInjector\SharpMonoInjector.csproj", "{929D5F1D-EE93-4AA2-900C-D9689CBC4DE1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

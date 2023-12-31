@@ -1,17 +1,7 @@
-﻿using System;
+﻿namespace SharpMonoInjector;
 
-namespace SharpMonoInjector
+public readonly struct ExportedFunction(string name, nint address)
 {
-    public struct ExportedFunction
-    {
-        public string Name;
-
-        public IntPtr Address;
-
-        public ExportedFunction(string name, IntPtr address)
-        {
-            Name = name;
-            Address = address;
-        }
-    }
+    public readonly string Name = name;
+    public readonly nint Address = address;
 }
