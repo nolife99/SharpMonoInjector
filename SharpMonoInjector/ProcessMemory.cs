@@ -6,7 +6,7 @@ using System.Text;
 
 namespace SharpMonoInjector;
 
-public class Memory(nint handle) : IDisposable
+public sealed class ProcessMemory(nint handle) : IDisposable
 {
     readonly List<(nint, int)> allocs = [];
 
@@ -58,9 +58,16 @@ public class Memory(nint handle) : IDisposable
             throw new InjectorException("Failed to write process memory", new Win32Exception(Marshal.GetLastWin32Error()));
     }
 
+    ~ProcessMemory() => Dispose(false);
     public void Dispose()
     {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    void Dispose(bool disposing)
+    {
         allocs.ForEach(kvp => Native.VirtualFreeEx(handle, kvp.Item1, kvp.Item2, MemoryFreeType.MEM_DECOMMIT));
-        allocs.Clear();
+        if (disposing) allocs.Clear();
     }
 }

@@ -4,19 +4,6 @@ using System.Runtime.InteropServices;
 
 namespace SharpMonoInjector;
 
-[StructLayout(LayoutKind.Sequential)] public struct MODULEINFO
-{
-    public nint lpBaseOfDll;
-    public int SizeOfImage;
-    public nint EntryPoint;
-}
-public enum ModuleFilter : uint
-{
-    LIST_MODULES_DEFAULT = 0x0,
-    LIST_MODULES_32BIT = 0x01,
-    LIST_MODULES_64BIT = 0x02,
-    LIST_MODULES_ALL = 0x03
-}
 [Flags] public enum AllocationType
 {
     MEM_COMMIT = 0x00001000,
@@ -48,12 +35,6 @@ public enum ModuleFilter : uint
     MEM_DECOMMIT = 0x4000,
     MEM_RELEASE = 0x8000
 }
-[Flags] public enum ThreadCreationFlags
-{
-    None = 0,
-    CREATE_SUSPENDED = 0x00000004,
-    STACK_SIZE_PARAM_IS_A_RESERVATION = 0x00010000
-}
 public enum WaitResult : uint
 {
     WAIT_ABANDONED = 0x00000080,
@@ -61,7 +42,7 @@ public enum WaitResult : uint
     WAIT_TIMEOUT = 0x00000102,
     WAIT_FAILED = 0xFFFFFFFF
 }
-[Flags] public enum ProcessAccessRights : uint
+[Flags] public enum ProcessAccessRights
 {
     PROCESS_ALL_ACCESS = 0x1FFFFF,
     PROCESS_CREATE_PROCESS = 0x0080,
@@ -78,13 +59,6 @@ public enum WaitResult : uint
     PROCESS_VM_WRITE = 0x0020,
     SYNCHRONIZE = 0x00100000
 }
-public enum MonoImageOpenStatus
-{
-    MONO_IMAGE_OK,
-    MONO_IMAGE_ERROR_ERRNO,
-    MONO_IMAGE_MISSING_ASSEMBLYREF,
-    MONO_IMAGE_IMAGE_INVALID
-}
 
 public static class Native
 {
@@ -98,19 +72,19 @@ public static class Native
 
     [DllImport("advapi32.dll", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern bool OpenProcessToken(nint ProcessHandle, uint DesiredAccess, out nint TokenHandle);
+    public static extern bool OpenProcessToken(nint ProcessHandle, int DesiredAccess, out nint TokenHandle);
 
     [DllImport("psapi.dll", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern bool EnumProcessModulesEx(nint hProcess, nint lphModule, int cb, out int lpcbNeeded, ModuleFilter dwFilterFlag);
+    public static extern bool EnumProcessModulesEx(nint hProcess, nint lphModule, int cb, out int lpcbNeeded, int dwFilterFlag = 0x03);
 
     [DllImport("psapi.dll")]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern uint GetModuleFileNameEx(nint hProcess, nint hModule, nint lpBaseName, uint nSize);
+    public static extern int GetModuleFileNameEx(nint hProcess, nint hModule, nint lpBaseName, int nSize);
 
     [DllImport("psapi.dll", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern bool GetModuleInformation(nint hProcess, nint hModule, out MODULEINFO lpmodinfo, uint cb);
+    public static extern bool GetModuleInformation(nint hProcess, nint hModule, out nint lpmodinfo, int cb);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -130,7 +104,7 @@ public static class Native
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern nint CreateRemoteThread(nint hProcess, nint lpThreadAttributes, int dwStackSize, nint lpStartAddress, nint lpParameter, ThreadCreationFlags dwCreationFlags, out int lpThreadId);
+    public static extern nint CreateRemoteThread(nint hProcess, nint lpThreadAttributes, int dwStackSize, nint lpStartAddress, nint lpParameter, int dwCreationFlags, out int lpThreadId);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

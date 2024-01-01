@@ -2,16 +2,16 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
 using Microsoft.Win32;
 
 namespace SharpMonoInjector;
 
-public static partial class ProcessUtils
+public static class ProcessUtils
 { 
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern bool IsWow64Process2(nint hProcess, out ushort processMachine, out ushort nativeMachine);
@@ -22,7 +22,7 @@ public static partial class ProcessUtils
 
     public static IEnumerable<ExportedFunction> GetExportedFunctions(nint handle, nint mod)
     {
-        using Memory memory = new(handle);
+        using ProcessMemory memory = new(handle);
 
         var exportDir = mod + memory.Read<int>(mod + memory.Read<int>(mod + 0x3C) + 0x18 + (Is64BitProcess(handle) ? 0x70 : 0x60));
         var names = mod + memory.Read<int>(exportDir + 0x20);
@@ -37,34 +37,34 @@ public static partial class ProcessUtils
     }
     public unsafe static bool GetMonoModule(nint handle, out nint monoModule)
     {
-        if (!Native.EnumProcessModulesEx(handle, 0, 0, out int bytesNeeded, ModuleFilter.LIST_MODULES_ALL))
+        if (!Native.EnumProcessModulesEx(handle, 0, 0, out var bytesNeeded))
             throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
 
         var count = bytesNeeded / nint.Size;
         var ptrs = stackalloc nint[count];
 
-        if (!Native.EnumProcessModulesEx(handle, (nint)ptrs, bytesNeeded, out bytesNeeded, ModuleFilter.LIST_MODULES_ALL))
+        if (!Native.EnumProcessModulesEx(handle, (nint)ptrs, bytesNeeded, out _))
             throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
 
-        var path = stackalloc sbyte[260 * Marshal.SizeOf<char>()];
+        var path = stackalloc sbyte[520];
         for (var i = 0; i < count; ++i) try
         {
-            _ = Native.GetModuleFileNameEx(handle, ptrs[i], (nint)path, 260);
-            if (new string(path, 0, 260).IndexOf("mono", StringComparison.OrdinalIgnoreCase) > -1)
+            var len = Native.GetModuleFileNameEx(handle, ptrs[i], (nint)path, 260);
+            if (new string(path, 0, len).IndexOf("mono", StringComparison.OrdinalIgnoreCase) > -1)
             {
-                if (!Native.GetModuleInformation(handle, ptrs[i], out var info, (uint)(nint.Size * count)))
+                if (!Native.GetModuleInformation(handle, ptrs[i], out var info, nint.Size * count))
                     throw new InjectorException("Failed to get module information", new Win32Exception(Marshal.GetLastWin32Error()));
 
-                if (GetExportedFunctions(handle, info.lpBaseOfDll).Any(f => f.Name == "mono_get_root_domain"))
+                if (GetExportedFunctions(handle, info).Any(f => f.Name == "mono_get_root_domain"))
                 {
-                    monoModule = info.lpBaseOfDll;
+                    monoModule = info;
                     return true;
                 }
             }
         }
         catch (Exception e)
         {
-            File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "[ProcessUtils] GetMono - ERROR: " + e.Message + "\r\n");
+            Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "[ProcessUtils] GetMono - ERROR: " + e.Message);
         }
 
         monoModule = 0;
@@ -111,7 +111,7 @@ public static partial class ProcessUtils
         }
         catch (Exception e) 
         { 
-            File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "[ProcessUtils] is64Bit - ERROR: " + e.Message + "\r\n"); 
+            Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "[ProcessUtils] is64Bit - ERROR: " + e.Message); 
         }
         return true;
     }
@@ -129,7 +129,7 @@ public static partial class ProcessUtils
 
             if (instances.Count > 0)
             {
-                File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: True\r\n");
+                Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: True");
                 var installedAVs = "Installed AntiVirus':\r\n";
 
                 foreach (var av in instances)
@@ -140,16 +140,16 @@ public static partial class ProcessUtils
 
                     if (((string)av.GetPropertyValue("pathToSignedProductExe")).StartsWith("windowsdefender") && ((string)av.GetPropertyValue("pathToSignedReportingExe")).EndsWith("Windows Defender\\MsMpeng.exe")) defenderFlag = true;
                 }
-                File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", installedAVs + "\r\n");
+                Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", installedAVs);
             }
-            else File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: False\r\n");
+            else Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: False");
 
             if (defenderFlag) return false;
             else return instances.Count > 0;
         }
         catch (Exception e)
         {
-            File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "Error Checking for AV: " + e.Message + "\r\n");
+            Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "Error Checking for AV: " + e.Message);
         }
         */
         #endregion
@@ -165,31 +165,30 @@ public static partial class ProcessUtils
 
             if (instances.Count > 0)
             {
-                File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: True\r\n");
-                var installedAVs = "Installed AntiVirus':\r\n";
+                Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: True");
+                StringBuilder installedAVs = new("Installed AntiVirus':\r\n");
 
                 foreach (var av in instances)
                 {
                     var AVInstalled = ((string)av.GetPropertyValue("pathToSignedProductExe")).Replace("//", "") + " " + (string)av.GetPropertyValue("pathToSignedReportingExe");
-                    installedAVs += "   " + AVInstalled + "\r\n";
+                    installedAVs.AppendLine("   " + AVInstalled);
                     avs.Add(AVInstalled.ToLower());
                 }
-                File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", installedAVs + "\r\n");
+                Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", installedAVs.ToString());
             }
-            else File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: False\r\n");
+            else Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: False");
 
-            foreach (var p in Process.GetProcesses()) avs.ForEach(detectedAV =>
+            Parallel.ForEach(Process.GetProcesses(), p => avs.ForEach(detectedAV =>
             {
-                if (detectedAV.EndsWith(p.ProcessName.ToLower() + ".exe"))
-                    File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Running: " + detectedAV + "\r\n");
-            });
+                if (detectedAV.EndsWith(p.ProcessName.ToLower() + ".exe")) Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Running: " + detectedAV);
+            }));
 
             if (defenderFlag) return false;
             else return instances.Count > 0;
         }
         catch (Exception e)
         {
-            File.AppendAllText(Environment.CurrentDirectory + "\\DebugLog.txt", "Error Checking for AV: " + e.Message + "\r\n");
+            Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "Error Checking for AV: " + e.Message);
         }
         return false;
     }
