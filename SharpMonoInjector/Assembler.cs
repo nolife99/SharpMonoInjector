@@ -54,7 +54,9 @@ public sealed class Assembler
     {
         var intArg = (int)arg;
         asm.Add(intArg < 128 ? (byte)0x6A : (byte)0x68);
-        asm.AddRange(intArg <= 255 ? [(byte)arg] : BitConverter.GetBytes(intArg));
+
+        if (intArg > 255) asm.AddRange(BitConverter.GetBytes(intArg));
+        else asm.Add((byte)arg);
     }
     public void MovEax(nint arg)
     {

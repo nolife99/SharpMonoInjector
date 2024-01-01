@@ -35,13 +35,6 @@ namespace SharpMonoInjector;
     MEM_DECOMMIT = 0x4000,
     MEM_RELEASE = 0x8000
 }
-public enum WaitResult : uint
-{
-    WAIT_ABANDONED = 0x00000080,
-    WAIT_OBJECT_0 = 0x00000000,
-    WAIT_TIMEOUT = 0x00000102,
-    WAIT_FAILED = 0xFFFFFFFF
-}
 [Flags] public enum ProcessAccessRights
 {
     PROCESS_ALL_ACCESS = 0x1FFFFF,
@@ -108,5 +101,5 @@ public static class Native
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern WaitResult WaitForSingleObject(nint hHandle, int dwMilliseconds);
+    public static extern uint WaitForSingleObject(nint hHandle, int dwMilliseconds);
 }

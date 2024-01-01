@@ -10,12 +10,12 @@ public sealed class ProcessMemory(nint handle) : IDisposable
 {
     readonly List<(nint, int)> allocs = [];
 
-    public string ReadString(nint address, int length, Encoding encoding)
+    public unsafe string ReadString(nint addr, int length, Encoding encoding)
     {
-        Span<byte> bytes = stackalloc byte[length];
+        var bytes = stackalloc byte[length];
         for (var i = 0; i < length; ++i)
         {
-            var read = Read<byte>(address + i);
+            var read = Read<byte>(addr + i);
             if (read == 0x00)
             {
                 length = i;
@@ -23,12 +23,12 @@ public sealed class ProcessMemory(nint handle) : IDisposable
             }
             bytes[i] = read;
         }
-        return encoding.GetString(bytes[..length]);
+        return encoding.GetString(bytes, length);
     }
-    public unsafe T Read<T>(nint address) where T : unmanaged
+    public unsafe T Read<T>(nint addr) where T : unmanaged
     {
         T ret;
-        if (!Native.ReadProcessMemory(handle, address, (nint)(&ret), Marshal.SizeOf<T>()))
+        if (!Native.ReadProcessMemory(handle, addr, (nint)(&ret), Marshal.SizeOf<T>()))
             throw new InjectorException("Failed to read process memory", new Win32Exception(Marshal.GetLastWin32Error()));
         
         return ret;
@@ -54,7 +54,7 @@ public sealed class ProcessMemory(nint handle) : IDisposable
     }
     public unsafe void Write(nint addr, ReadOnlySpan<byte> data)
     {
-        fixed (void* ptr = &MemoryMarshal.GetReference(data)) if (!Native.WriteProcessMemory(handle, addr, (nint)ptr, data.Length))
+        fixed (void* ptr = data) if (!Native.WriteProcessMemory(handle, addr, (nint)ptr, data.Length))
             throw new InjectorException("Failed to write process memory", new Win32Exception(Marshal.GetLastWin32Error()));
     }
 

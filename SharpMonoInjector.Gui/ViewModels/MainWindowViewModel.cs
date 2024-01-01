@@ -15,8 +15,7 @@ public partial class MainWindowViewModel : ViewModel
 {
     public MainWindowViewModel()
     {
-        AVAlert = ProcessUtils.AntivirusInstalled();
-        if (AVAlert) AVColor = "#FFA00668";
+        if (AVAlert = ProcessUtils.AntivirusInstalled()) AVColor = "#FFA00668";
         else AVColor = "#FF21AC40";
 
         RefreshCommand = new(async () =>
@@ -26,7 +25,7 @@ public partial class MainWindowViewModel : ViewModel
             Status = "Refreshing processes";
 
             List<MonoProcess> processes = [];
-            Trace.WriteLine("[MainWindowViewModel] - Setting Process Access Rights:\r\n\tPROCESS_QUERY_INFORMATION\r\n\tPROCESS_VM_READ");
+            Trace.WriteLine("[MainWindowViewModel] - Setting Process Access Rights:\n\tPROCESS_QUERY_INFORMATION\n\tPROCESS_VM_READ");
             Trace.WriteLine("[MainWindowViewModel] - Checking Processes for Mono");
 
             await Task.Run(() =>
@@ -59,10 +58,13 @@ public partial class MainWindowViewModel : ViewModel
                     }
                     catch (Exception e)
                     {
-                        Trace.WriteLine("    ERROR SCANNING: " + p.ProcessName + " - " + e.Message);
+                        Trace.WriteLine("    ERROR SCANNING: " + p.ProcessName + " - " + e.ToString());
+                    }
+                    finally
+                    {
+                        p.Dispose();
                     }
                 });
-                Trace.WriteLine("FINISHED SCANNING PROCESSES...");
             });
 
             Processes = processes;
@@ -74,7 +76,7 @@ public partial class MainWindowViewModel : ViewModel
             else
             {
                 Status = "No Mono process found";
-                Trace.WriteLine("No Mono process found:");
+                Trace.WriteLine("No Mono process found");
             }
             IsRefreshing = false;
         }, () => !IsRefreshing);
@@ -83,13 +85,13 @@ public partial class MainWindowViewModel : ViewModel
         {
             OpenFileDialog ofd = new()
             {
-                Filter = "Dynamic Link Library|*.dll",
+                Filter = ".NET Assemblies|*.dll",
                 Title = "Select assembly to inject",
             };
             if (ofd.ShowDialog().Value) AssemblyPath = ofd.FileName;
         });
 
-        InjectCommand = new(() =>
+        InjectCommand = new(async () =>
         {
             nint handle;
             try
@@ -106,37 +108,40 @@ public partial class MainWindowViewModel : ViewModel
                 return;
             }
 
+            var filename = Path.GetFileName(AssemblyPath);
             byte[] file;
+
             try
             {
-                file = File.ReadAllBytes(AssemblyPath);
+                Status = "Loading " + filename;
+                file = await File.ReadAllBytesAsync(AssemblyPath);
             }
             catch (IOException)
             {
-                Status = "Failed to read the file " + AssemblyPath;
+                Status = "Failed to load file " + AssemblyPath;
                 return;
             }
 
             IsExecuting = true;
-            Status = "Injecting " + Path.GetFileName(AssemblyPath);
+            Status = "Injecting " + filename;
 
             using (Injector injector = new(handle, SelectedProcess.MonoModule))
             {
                 try
                 {
-                    var asm = injector.Inject(file, InjectNamespace, InjectClassName, InjectMethodName);
-                    InjectedAssemblies.Add(new()
+                    var asm = await Task.Run(() => injector.Inject(file, InjectNamespace, InjectClassName, InjectMethodName));
+                    await Application.Current.Dispatcher.InvokeAsync(() => InjectedAssemblies.Add(new()
                     {
                         ProcessId = SelectedProcess.Id,
                         Address = asm,
-                        Name = Path.GetFileName(AssemblyPath),
+                        Name = filename,
                         Is64Bit = injector.Is64Bit
-                    });
-                    Status = "Injection successful";
+                    }));
+                    Status = "Injected " + filename;
                 }
-                catch (InjectorException ie)
+                catch (InjectorException e)
                 {
-                    Status = "Injection failed: " + ie.Message;
+                    Status = "Injection failed: " + e.Message;
                 }
                 catch (Exception e)
                 {
@@ -165,7 +170,7 @@ public partial class MainWindowViewModel : ViewModel
                 {
                     injector.Eject(SelectedAssembly.Address, EjectNamespace, EjectClassName, EjectMethodName);
                     InjectedAssemblies.Remove(SelectedAssembly);
-                    Status = "Ejection successful";
+                    Status = "Ejected " + SelectedAssembly.Name;
                 }
                 catch (InjectorException ie)
                 {
@@ -363,7 +368,7 @@ public partial class MainWindowViewModel : ViewModel
         }
         catch (Exception e)
         {
-            Trace.WriteLine("    Error Getting User Process: " + process.ProcessName + " - " + e.Message);
+            Trace.WriteLine("\tError Getting User Process: " + process.ProcessName + " - " + e.Message);
             return null;
         }
         finally

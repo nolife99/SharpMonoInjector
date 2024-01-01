@@ -31,28 +31,29 @@ public static class ProcessUtils
 
         for (var i = 0; i < memory.Read<int>(exportDir + 0x18); ++i)
         {
-            var address = mod + memory.Read<int>(funcs + memory.Read<short>(ordinals + i * 2) * 4);
-            if (address != 0) yield return new(memory.ReadString(mod + memory.Read<int>(names + i * 4), 32, Encoding.ASCII), address);
+            var addr = mod + memory.Read<int>(funcs + memory.Read<short>(ordinals + i * 2) * 4);
+            if (addr != 0) yield return new(memory.ReadString(mod + memory.Read<int>(names + i * 4), 32, Encoding.ASCII), addr);
         }
     }
     public unsafe static bool GetMonoModule(nint handle, out nint monoModule)
     {
         if (!Native.EnumProcessModulesEx(handle, 0, 0, out var bytesNeeded))
-            throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
+            throw new InjectorException("Failed to get process module count", new Win32Exception(Marshal.GetLastWin32Error()));
 
-        var count = bytesNeeded / nint.Size;
+        var count = bytesNeeded / (Is64BitProcess(handle) ? 8 : 4);
         var ptrs = stackalloc nint[count];
 
         if (!Native.EnumProcessModulesEx(handle, (nint)ptrs, bytesNeeded, out _))
             throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
 
-        var path = stackalloc sbyte[520];
+        const int MAX_PATH = 260;
+        var path = stackalloc sbyte[MAX_PATH * Marshal.SizeOf<char>()];
+
         for (var i = 0; i < count; ++i) try
         {
-            var len = Native.GetModuleFileNameEx(handle, ptrs[i], (nint)path, 260);
-            if (new string(path, 0, len).IndexOf("mono", StringComparison.OrdinalIgnoreCase) > -1)
+            if (new string(path, 0, Native.GetModuleFileNameEx(handle, ptrs[i], (nint)path, MAX_PATH)).Contains("mono", StringComparison.OrdinalIgnoreCase))
             {
-                if (!Native.GetModuleInformation(handle, ptrs[i], out var info, nint.Size * count))
+                if (!Native.GetModuleInformation(handle, ptrs[i], out var info, bytesNeeded))
                     throw new InjectorException("Failed to get module information", new Win32Exception(Marshal.GetLastWin32Error()));
 
                 if (GetExportedFunctions(handle, info).Any(f => f.Name == "mono_get_root_domain"))
@@ -64,7 +65,7 @@ public static class ProcessUtils
         }
         catch (Exception e)
         {
-            Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "[ProcessUtils] GetMono - ERROR: " + e.Message);
+            Trace.WriteLine("[ProcessUtils] GetMono - ERROR: " + e.Message);
         }
 
         monoModule = 0;
@@ -86,17 +87,12 @@ public static class ProcessUtils
                 isTargetx64 = false;
                 if (handle != 0)
                 {
-                    ushort pMachine = 0, nMachine = 0;
-                    try
-                    {
-                        if (!IsWow64Process2(handle, out pMachine, out nMachine)) { /*handle error*/ }
+                    IsWow64Process2(handle, out var pMachine, out _);
 
-                        if (pMachine == 332) isTargetx64 = false;
-                        else isTargetx64 = true;
+                    if (pMachine == 332) isTargetx64 = false;
+                    else isTargetx64 = true;
 
-                        return isTargetx64;
-                    }
-                    catch { /* Will try the Win7 method */ }
+                    return isTargetx64;
                 }
         
                 #endregion
@@ -111,76 +107,38 @@ public static class ProcessUtils
         }
         catch (Exception e) 
         { 
-            Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "[ProcessUtils] is64Bit - ERROR: " + e.Message); 
+            Trace.WriteLine("[ProcessUtils] is64Bit - ERROR: " + e.Message); 
         }
         return true;
     }
     public static bool AntivirusInstalled()
     {
-        #region Pre-Windows 7
-        /* 
-        try
-        {
-            var defenderFlag = false;
-            var wmipathstr = @"\\" + Environment.MachineName + @"\root\SecurityCenter";
-
-            var searcher = new ManagementObjectSearcher(wmipathstr, "SELECT * FROM AntivirusProduct");
-            var instances = searcher.Get();
-
-            if (instances.Count > 0)
-            {
-                Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: True");
-                var installedAVs = "Installed AntiVirus':\r\n";
-
-                foreach (var av in instances)
-                {
-                    installedAVs += av.GetText(TextFormat.WmiDtd20) + "\r\n";
-                    var AVInstalled = ((string)av.GetPropertyValue("pathToSignedProductExe")).Replace("//", "") + " " + (string)av.GetPropertyValue("pathToSignedReportingExe");
-                    installedAVs += "   " + AVInstalled + "\r\n";
-
-                    if (((string)av.GetPropertyValue("pathToSignedProductExe")).StartsWith("windowsdefender") && ((string)av.GetPropertyValue("pathToSignedReportingExe")).EndsWith("Windows Defender\\MsMpeng.exe")) defenderFlag = true;
-                }
-                Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", installedAVs);
-            }
-            else Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: False");
-
-            if (defenderFlag) return false;
-            else return instances.Count > 0;
-        }
-        catch (Exception e)
-        {
-            Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "Error Checking for AV: " + e.Message);
-        }
-        */
-        #endregion
-
         try
         {
             List<string> avs = [];
             var defenderFlag = false;
-            var wmipathstr = @"\\" + Environment.MachineName + @"\root\SecurityCenter2";
 
-            ManagementObjectSearcher searcher = new(wmipathstr, "SELECT * FROM AntivirusProduct");
-            var instances = searcher.Get();
+            using ManagementObjectSearcher searcher = new(@"\\" + Environment.MachineName + @"\root\SecurityCenter2", "SELECT * FROM AntivirusProduct");
+            using var instances = searcher.Get();
 
             if (instances.Count > 0)
             {
-                Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: True");
-                StringBuilder installedAVs = new("Installed AntiVirus':\r\n");
+                Trace.WriteLine("Antivirus Installed: True");
+                StringBuilder installedAVs = new("Installed Antivirus:\n");
 
                 foreach (var av in instances)
                 {
-                    var AVInstalled = ((string)av.GetPropertyValue("pathToSignedProductExe")).Replace("//", "") + " " + (string)av.GetPropertyValue("pathToSignedReportingExe");
-                    installedAVs.AppendLine("   " + AVInstalled);
-                    avs.Add(AVInstalled.ToLower());
+                    var avInstalled = ((string)av.GetPropertyValue("pathToSignedProductExe")).Replace("//", "") + " " + (string)av.GetPropertyValue("pathToSignedReportingExe");
+                    installedAVs.AppendLine("   " + avInstalled);
+                    avs.Add(avInstalled.ToLower());
                 }
-                Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", installedAVs.ToString());
+                Trace.WriteLine(installedAVs.ToString());
             }
-            else Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Installed: False");
+            else Trace.WriteLine("Antivirus Installed: False");
 
-            Parallel.ForEach(Process.GetProcesses(), p => avs.ForEach(detectedAV =>
+            Parallel.ForEach(Process.GetProcesses(), p => Parallel.ForEach(avs, detect =>
             {
-                if (detectedAV.EndsWith(p.ProcessName.ToLower() + ".exe")) Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "AntiVirus Running: " + detectedAV);
+                if (detect.EndsWith(p.ProcessName + ".exe", StringComparison.OrdinalIgnoreCase)) Trace.WriteLine("Antivirus Running: " + detect);
             }));
 
             if (defenderFlag) return false;
@@ -188,7 +146,7 @@ public static class ProcessUtils
         }
         catch (Exception e)
         {
-            Trace.WriteLine(Environment.CurrentDirectory + "\\DebugLog.txt", "Error Checking for AV: " + e.Message);
+            Trace.WriteLine("Error checking for Antivirus: " + e.Message);
         }
         return false;
     }
