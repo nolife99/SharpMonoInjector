@@ -25,47 +25,38 @@ public partial class MainWindowViewModel : ViewModel
             Status = "Refreshing processes";
 
             List<MonoProcess> processes = [];
-            Trace.WriteLine("[MainWindowViewModel] - Setting Process Access Rights:\n\tPROCESS_QUERY_INFORMATION\n\tPROCESS_VM_READ");
             Trace.WriteLine("[MainWindowViewModel] - Checking Processes for Mono");
 
-            await Task.Run(() =>
+            var cp = Environment.ProcessId;
+            await Task.Run(() => Parallel.ForEach(Process.GetProcesses(), (p, l) =>
             {
-                var cp = Environment.ProcessId;
-                Parallel.ForEach(Process.GetProcesses(), (p, l) =>
+                using (p) try
                 {
-                    try
+                    if (GetProcessUser(p) is not null && p.Id != cp)
                     {
-                        if (GetProcessUser(p) is not null && p.Id != cp)
+                        using ProcessHandle handle = new(p.Id, ProcessAccess.QueryInfo | ProcessAccess.ReadVM);
+                        if (!handle.IsInvalid)
                         {
-                            nint handle;
-                            if ((handle = Native.OpenProcess(ProcessAccessRights.PROCESS_QUERY_INFORMATION | ProcessAccessRights.PROCESS_VM_READ, false, p.Id)) != 0)
+                            Trace.WriteLine("\t" + p.ProcessName + ".exe");
+                            if (ProcessUtils.GetMonoModule(handle, out var mono))
                             {
-                                Trace.WriteLine("\t" + p.ProcessName + ".exe");
-                                if (ProcessUtils.GetMonoModule(handle, out var mono))
+                                Trace.WriteLine("\t\tMono found in process: " + p.ProcessName + ".exe");
+                                processes.Add(new()
                                 {
-                                    Trace.WriteLine("\t\tMono found in process: " + p.ProcessName + ".exe");
-                                    processes.Add(new()
-                                    {
-                                        MonoModule = mono,
-                                        Id = p.Id,
-                                        Name = p.ProcessName
-                                    });
-                                    l.Stop();
-                                }
-                                Native.CloseHandle(handle);
+                                    MonoModule = mono,
+                                    Id = p.Id,
+                                    Name = p.ProcessName
+                                });
+                                l.Stop();
                             }
                         }
                     }
-                    catch (Exception e)
-                    {
-                        Trace.WriteLine("    ERROR SCANNING: " + p.ProcessName + " - " + e.ToString());
-                    }
-                    finally
-                    {
-                        p.Dispose();
-                    }
-                });
-            });
+                }
+                catch (Exception e)
+                {
+                    Trace.WriteLine("\tERROR SCANNING: " + p.ProcessName + " - " + e.ToString());
+                }
+            }));
 
             Processes = processes;
             if (processes.Count > 0)
@@ -93,18 +84,10 @@ public partial class MainWindowViewModel : ViewModel
 
         InjectCommand = new(async () =>
         {
-            nint handle;
-            try
+            using ProcessHandle handle = new(SelectedProcess.Id, ProcessAccess.All);
+            if (handle.IsInvalid)
             {
-                if ((handle = Native.OpenProcess(ProcessAccessRights.PROCESS_ALL_ACCESS, false, SelectedProcess.Id)) == 0)
-                {
-                    Status = "Failed to open process";
-                    return;
-                }
-            }
-            catch (Exception e)
-            {
-                Status = "Error: " + e.Message;
+                Status = "Failed to open process";
                 return;
             }
 
@@ -130,7 +113,7 @@ public partial class MainWindowViewModel : ViewModel
                 try
                 {
                     var asm = await Task.Run(() => injector.Inject(file, InjectNamespace, InjectClassName, InjectMethodName));
-                    await Application.Current.Dispatcher.InvokeAsync(() => InjectedAssemblies.Add(new()
+                    await Application.Current.Dispatcher.InvokeAsync(() => injectedAssemblies.Add(new()
                     {
                         ProcessId = SelectedProcess.Id,
                         Address = asm,
@@ -151,10 +134,10 @@ public partial class MainWindowViewModel : ViewModel
             IsExecuting = false;
         }, () => SelectedProcess != null && File.Exists(AssemblyPath) && !string.IsNullOrEmpty(InjectClassName) && !string.IsNullOrEmpty(InjectMethodName) && !IsExecuting);
 
-        EjectCommand = new(() => 
+        EjectCommand = new(() =>
         {
-            var handle = Native.OpenProcess(ProcessAccessRights.PROCESS_ALL_ACCESS, false, SelectedAssembly.ProcessId);
-            if (handle == 0)
+            using ProcessHandle handle = new(SelectedAssembly.ProcessId, ProcessAccess.All);
+            if (handle.IsInvalid)
             {
                 Status = "Failed to open process";
                 return;
@@ -358,12 +341,14 @@ public partial class MainWindowViewModel : ViewModel
     static string GetProcessUser(Process process)
     {
         var result = "";
-        nint processHandle = 0;
+        nint token = 0;
 
         try
         {
-            Native.OpenProcessToken(process.Handle, 8, out processHandle);
-            var user = new WindowsIdentity(processHandle).Name;
+            Native.OpenProcessToken(process.Handle, 8, out token);
+            using WindowsIdentity id = new(token);
+
+            var user = id.Name;
             result = user.Contains('\\') ? user[(user.IndexOf('\\') + 1)..] : user;
         }
         catch (Exception e)
@@ -373,7 +358,7 @@ public partial class MainWindowViewModel : ViewModel
         }
         finally
         {
-            if (processHandle != 0) Native.CloseHandle(processHandle);
+            if (token != 0) Native.CloseHandle(token);
         }
         return result;
     }

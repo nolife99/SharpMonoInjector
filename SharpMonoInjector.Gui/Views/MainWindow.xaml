@@ -388,7 +388,17 @@
                 <StatusBarItem Foreground="#FF21AC40" BorderBrush="#FF272727" Background="#2A2A2C">
                     <TextBlock Text="Status:"/>
                 </StatusBarItem>
-                <StatusBarItem  BorderBrush="#FF272727" Background="#2A2A2C" Foreground="#FF1FA03C" Width="450">
+                <StatusBarItem BorderBrush="#FF272727" Background="#2A2A2C" Foreground="#FF1FA03C">
+                    <StatusBarItem.Style>
+                        <Style TargetType="StatusBarItem">
+                            <Setter Property="Width" Value="452"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Path=AVAlert}" Value="False">
+                                    <Setter Property="Width" Value="555"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StatusBarItem.Style>
                     <TextBlock Text="{Binding Path=Status}">
                         <TextBlock.ContextMenu>
                             <ContextMenu>
@@ -397,11 +407,19 @@
                         </TextBlock.ContextMenu>
                     </TextBlock>
                 </StatusBarItem>
-                <StatusBarItem x:Name="uiavalert" x:FieldModifier="public" Foreground="{Binding Path=AVColor}" BorderBrush="#FF272727" Background="#2A2A2C" HorizontalAlignment="Right">
-                    <TextBlock Text="AV Detected:"/>
-                </StatusBarItem>
-                <StatusBarItem  BorderBrush="#FF272727" Background="#FF2C2A2C" Foreground="{Binding Path=AVColor}" Width="60" HorizontalAlignment="Left" Height="24">
-                    <TextBlock Text="{Binding Path=AVAlert}" />
+                <StatusBarItem x:Name="uiavalert" x:FieldModifier="public" Foreground="{Binding Path=AVColor}" BorderBrush="#FF272727" Background="#2A2A2C" HorizontalAlignment="Left">
+                    <TextBlock Text="Antivirus detected!">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Path=AVAlert}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </StatusBarItem>
             </StatusBar.Items>
         </StatusBar>

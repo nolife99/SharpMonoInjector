@@ -6,7 +6,7 @@ using System.Text;
 
 namespace SharpMonoInjector;
 
-public sealed class ProcessMemory(nint handle) : IDisposable
+public sealed class ProcessMemory(ProcessHandle handle) : IDisposable
 {
     readonly List<(nint, int)> allocs = [];
 
@@ -28,7 +28,7 @@ public sealed class ProcessMemory(nint handle) : IDisposable
     public unsafe T Read<T>(nint addr) where T : unmanaged
     {
         T ret;
-        if (!Native.ReadProcessMemory(handle, addr, (nint)(&ret), Marshal.SizeOf<T>()))
+        if (!Native.ReadProcessMemory(handle.DangerousGetHandle(), addr, (nint)(&ret), Marshal.SizeOf<T>()))
             throw new InjectorException("Failed to read process memory", new Win32Exception(Marshal.GetLastWin32Error()));
         
         return ret;
@@ -46,7 +46,7 @@ public sealed class ProcessMemory(nint handle) : IDisposable
 
     public nint Allocate(int size)
     {
-        var addr = Native.VirtualAllocEx(handle, 0, size, AllocationType.MEM_COMMIT, MemoryProtection.PAGE_EXECUTE_READWRITE);
+        var addr = Native.VirtualAllocEx(handle.DangerousGetHandle(), 0, size, AllocationType.MEM_COMMIT, MemoryProtection.PAGE_EXECUTE_READWRITE);
         if (addr == 0) throw new InjectorException("Failed to allocate process memory", new Win32Exception(Marshal.GetLastWin32Error()));
 
         allocs.Add((addr, size));
@@ -54,7 +54,7 @@ public sealed class ProcessMemory(nint handle) : IDisposable
     }
     public unsafe void Write(nint addr, ReadOnlySpan<byte> data)
     {
-        fixed (void* ptr = data) if (!Native.WriteProcessMemory(handle, addr, (nint)ptr, data.Length))
+        fixed (void* ptr = data) if (!Native.WriteProcessMemory(handle.DangerousGetHandle(), addr, (nint)ptr, data.Length))
             throw new InjectorException("Failed to write process memory", new Win32Exception(Marshal.GetLastWin32Error()));
     }
 
@@ -67,7 +67,7 @@ public sealed class ProcessMemory(nint handle) : IDisposable
 
     void Dispose(bool disposing)
     {
-        allocs.ForEach(kvp => Native.VirtualFreeEx(handle, kvp.Item1, kvp.Item2, MemoryFreeType.MEM_DECOMMIT));
+        allocs.ForEach(kvp => Native.VirtualFreeEx(handle.DangerousGetHandle(), kvp.Item1, kvp.Item2, MemoryFreeType.MEM_DECOMMIT));
         if (disposing) allocs.Clear();
     }
 }

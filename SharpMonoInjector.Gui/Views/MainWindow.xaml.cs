@@ -14,7 +14,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
 #if RELEASE
-        if (!new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator))
+        if (!new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator) && MessageBox.Show(
+            "It is recommended that you run this tool as Administrator in order to improve injection.\nRun as Administrator?", 
+            "SharpMonoInjector", 
+            MessageBoxButton.YesNo) is MessageBoxResult.Yes)
         {
             Process.Start(new ProcessStartInfo(Environment.ProcessPath)
             {

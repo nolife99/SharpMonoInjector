@@ -20,11 +20,11 @@ public static class ProcessUtils
     static extern bool IsWow64Process(nint hProcess, out bool wow64Process);
     static bool isTargetx64;
 
-    public static IEnumerable<ExportedFunction> GetExportedFunctions(nint handle, nint mod)
+    public static IEnumerable<ExportedFunction> GetExportedFunctions(ProcessHandle proc, nint mod)
     {
-        using ProcessMemory memory = new(handle);
+        using ProcessMemory memory = new(proc);
 
-        var exportDir = mod + memory.Read<int>(mod + memory.Read<int>(mod + 0x3C) + 0x18 + (Is64BitProcess(handle) ? 0x70 : 0x60));
+        var exportDir = mod + memory.Read<int>(mod + memory.Read<int>(mod + 0x3C) + 0x18 + (Is64BitProcess(proc) ? 0x70 : 0x60));
         var names = mod + memory.Read<int>(exportDir + 0x20);
         var ordinals = mod + memory.Read<int>(exportDir + 0x24);
         var funcs = mod + memory.Read<int>(exportDir + 0x1C);
@@ -35,12 +35,13 @@ public static class ProcessUtils
             if (addr != 0) yield return new(memory.ReadString(mod + memory.Read<int>(names + i * 4), 32, Encoding.ASCII), addr);
         }
     }
-    public unsafe static bool GetMonoModule(nint handle, out nint monoModule)
+    public unsafe static bool GetMonoModule(ProcessHandle proc, out nint monoModule)
     {
+        var handle = proc.DangerousGetHandle();
         if (!Native.EnumProcessModulesEx(handle, 0, 0, out var bytesNeeded))
             throw new InjectorException("Failed to get process module count", new Win32Exception(Marshal.GetLastWin32Error()));
 
-        var count = bytesNeeded / (Is64BitProcess(handle) ? 8 : 4);
+        var count = bytesNeeded / (Is64BitProcess(proc) ? 8 : 4);
         var ptrs = stackalloc nint[count];
 
         if (!Native.EnumProcessModulesEx(handle, (nint)ptrs, bytesNeeded, out _))
@@ -56,7 +57,7 @@ public static class ProcessUtils
                 if (!Native.GetModuleInformation(handle, ptrs[i], out var info, bytesNeeded))
                     throw new InjectorException("Failed to get module information", new Win32Exception(Marshal.GetLastWin32Error()));
 
-                if (GetExportedFunctions(handle, info).Any(f => f.Name == "mono_get_root_domain"))
+                if (GetExportedFunctions(proc, info).Any(f => f.Name == "mono_get_root_domain"))
                 {
                     monoModule = info;
                     return true;
@@ -71,7 +72,7 @@ public static class ProcessUtils
         monoModule = 0;
         return false;
     }
-    public static bool Is64BitProcess(nint handle)
+    public static bool Is64BitProcess(ProcessHandle proc)
     {
         try
         {
@@ -85,9 +86,9 @@ public static class ProcessUtils
                 #region Win10
         
                 isTargetx64 = false;
-                if (handle != 0)
+                if (!proc.IsInvalid)
                 {
-                    IsWow64Process2(handle, out var pMachine, out _);
+                    IsWow64Process2(proc.DangerousGetHandle(), out var pMachine, out _);
 
                     if (pMachine == 332) isTargetx64 = false;
                     else isTargetx64 = true;
@@ -100,7 +101,7 @@ public static class ProcessUtils
 
             #region Win7
 
-            IsWow64Process(handle, out bool isTargetWOWx64);
+            IsWow64Process(proc.DangerousGetHandle(), out bool isTargetWOWx64);
             return !isTargetWOWx64;
 
             #endregion  
@@ -126,20 +127,26 @@ public static class ProcessUtils
                 Trace.WriteLine("Antivirus Installed: True");
                 StringBuilder installedAVs = new("Installed Antivirus:\n");
 
-                foreach (var av in instances)
+                Parallel.ForEach(instances.Cast<ManagementBaseObject>(), av =>
                 {
-                    var avInstalled = ((string)av.GetPropertyValue("pathToSignedProductExe")).Replace("//", "") + " " + (string)av.GetPropertyValue("pathToSignedReportingExe");
-                    installedAVs.AppendLine("   " + avInstalled);
-                    avs.Add(avInstalled.ToLower());
-                }
+                    using (av)
+                    {
+                        var avInstalled = ((string)av.GetPropertyValue("pathToSignedProductExe")).Replace("//", "") + " " + (string)av.GetPropertyValue("pathToSignedReportingExe");
+                        installedAVs.AppendLine("   " + avInstalled);
+                        avs.Add(avInstalled.ToLower());
+                    }
+                });
                 Trace.WriteLine(installedAVs.ToString());
             }
             else Trace.WriteLine("Antivirus Installed: False");
 
-            Parallel.ForEach(Process.GetProcesses(), p => Parallel.ForEach(avs, detect =>
+            Parallel.ForEach(Process.GetProcesses(), p =>
             {
-                if (detect.EndsWith(p.ProcessName + ".exe", StringComparison.OrdinalIgnoreCase)) Trace.WriteLine("Antivirus Running: " + detect);
-            }));
+                using (p) Parallel.ForEach(avs, detect =>
+                {
+                    if (detect.EndsWith(p.ProcessName + ".exe", StringComparison.OrdinalIgnoreCase)) Trace.WriteLine("Antivirus Running: " + detect);
+                });
+            });
 
             if (defenderFlag) return false;
             else return instances.Count > 0;
