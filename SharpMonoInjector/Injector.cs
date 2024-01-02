@@ -48,31 +48,29 @@ public sealed class Injector : IDisposable
 
     public bool Is64Bit { get; private set; }
 
-    public Injector(string processName)
+    public Injector(ReadOnlySpan<char> processName)
     {
-        if (processName.EndsWith(".exe")) processName = processName.Replace(".exe", "");
-        using var process = Process.GetProcessesByName(processName).AsParallel().FirstOrDefault() ?? throw new InjectorException($"Couldn't find process with name '{processName}'");
+        processName = processName[..processName.IndexOf(".exe")];
+        using var process = Process.GetProcessesByName(processName.ToString()).AsParallel().FirstOrDefault() ?? throw new InjectorException($"Couldn't find process with name '{processName}'");
 
-        if ((handle = new(process.Id, ProcessAccess.All)).IsInvalid) throw new InjectorException("Failed to open process", new Win32Exception(Marshal.GetLastWin32Error()));
+        if ((handle = new(process.Id)).IsInvalid) throw new InjectorException($"Failed to open process with ID {process.Id}", new Win32Exception(Marshal.GetLastWin32Error()));
         Is64Bit = ProcessUtils.Is64BitProcess(handle);
-        if (!ProcessUtils.GetMonoModule(handle, out mono)) throw new InjectorException("Failed to find mono.dll in the target process");
+        if (!ProcessUtils.GetMonoModule(handle, out mono)) throw new InjectorException("Failed to find mono.dll in target process");
 
         memory = new(handle);
     }
     public Injector(int processId)
     {
-        if ((handle = new(processId, ProcessAccess.All)).IsInvalid) throw new InjectorException("Failed to open process", new Win32Exception(Marshal.GetLastWin32Error()));
+        if ((handle = new(processId)).IsInvalid) throw new InjectorException($"Failed to open process with ID {processId}", new Win32Exception(Marshal.GetLastWin32Error()));
         Is64Bit = ProcessUtils.Is64BitProcess(handle);
-        if (!ProcessUtils.GetMonoModule(handle, out mono)) throw new InjectorException("Failed to find mono.dll in the target process");
+        if (!ProcessUtils.GetMonoModule(handle, out mono)) throw new InjectorException("Failed to find mono.dll in target process");
 
         memory = new(handle);
     }
     public Injector(ProcessHandle processHandle, nint monoModule)
     {
-        if ((handle = processHandle).IsInvalid) throw new ArgumentNullException(nameof(processHandle), "Handle cannot be zero");
-        if ((mono = monoModule) == 0) throw new ArgumentNullException(nameof(monoModule), "Handle cannot be zero");
-
-        Is64Bit = ProcessUtils.Is64BitProcess(handle);
+        mono = monoModule;
+        Is64Bit = ProcessUtils.Is64BitProcess(handle = processHandle);
         memory = new(handle);
     }
 
@@ -93,14 +91,14 @@ public sealed class Injector : IDisposable
         });
         exports.AsParallel().ForAll(kvp =>
         {
-            if (kvp.Value == 0) throw new InjectorException($"Failed to obtain the addr of {kvp.Key}()");
+            if (kvp.Value == 0) throw new InjectorException($"Failed to get address of {kvp.Key}()");
         });
     }
-    public nint Inject(ReadOnlySpan<byte> rawAssembly, string @namespace, string className, string methodName)
+    public nint Inject(ReadOnlySpan<byte> rawAssembly, ReadOnlySpan<char> @namespace, ReadOnlySpan<char> className, ReadOnlySpan<char> methodName)
     {
-        if (rawAssembly.Length == 0) throw new ArgumentException($"{nameof(rawAssembly)} cannot be empty", nameof(rawAssembly));
-        ArgumentNullException.ThrowIfNull(className);
-        ArgumentNullException.ThrowIfNull(methodName);
+        if (rawAssembly.IsEmpty) throw new ArgumentException($"{nameof(rawAssembly)} can't be empty", nameof(rawAssembly));
+        if (className.IsEmpty) throw new ArgumentException($"{nameof(className)} can't be empty", nameof(className));
+        if (methodName.IsEmpty) throw new ArgumentException($"{nameof(methodName)} can't be empty", nameof(methodName));
 
         ObtainMonoExports();
         root = GetRootDomain();
@@ -112,11 +110,11 @@ public sealed class Injector : IDisposable
         attach = false;
         return assembly;
     }
-    public void Eject(nint assembly, string @namespace, string className, string methodName)
+    public void Eject(nint assembly, ReadOnlySpan<char> @namespace, ReadOnlySpan<char> className, ReadOnlySpan<char> methodName)
     {
-        if (assembly == 0) throw new ArgumentException($"{nameof(assembly)} cannot be zero", nameof(assembly));
-        ArgumentNullException.ThrowIfNull(className);
-        ArgumentNullException.ThrowIfNull(methodName);
+        if (assembly == 0) throw new ArgumentException($"{nameof(assembly)} can't be zero", nameof(assembly));
+        if (className.IsEmpty) throw new ArgumentException($"{nameof(className)} can't be empty", nameof(className));
+        if (methodName.IsEmpty) throw new ArgumentException($"{nameof(methodName)} can't be empty", nameof(methodName));
 
         ObtainMonoExports();
         root = GetRootDomain();
@@ -127,9 +125,9 @@ public sealed class Injector : IDisposable
 
         attach = false;
     }
-    static void ThrowIfNull(nint ptr, string methodName)
+    static void ThrowIfNull(nint ptr, ReadOnlySpan<char> methodName)
     {
-        if (ptr == 0) throw new InjectorException($"{methodName}() returned NULL");
+        if (ptr == 0) throw new InjectorException(string.Concat(methodName, "() returned null"));
     }
 
     nint GetRootDomain()
@@ -150,7 +148,7 @@ public sealed class Injector : IDisposable
     nint OpenAssemblyFromImage(nint image)
     {
         var statusPtr = memory.Allocate(4);
-        var assembly = Execute(exports[openImageAsm], image, memory.AllocateAndWrite(new byte[1]), statusPtr, 0);
+        var assembly = Execute(exports[openImageAsm], image, memory.Allocate(1), statusPtr, 0);
 
         var status = memory.Read<int>(statusPtr);
         if (status != 0) throw new InjectorException($"{openImageAsm}() failed: {memory.ReadString(Execute(exports[strErr], status), 256, Encoding.UTF8)}");
@@ -162,19 +160,19 @@ public sealed class Injector : IDisposable
         ThrowIfNull(image, asmImage);
         return image;
     }
-    nint GetClassFromName(nint image, string @namespace, string className)
+    nint GetClassFromName(nint image, ReadOnlySpan<char> @namespace, ReadOnlySpan<char> className)
     {
         var @class = Execute(exports[matchClass], image, memory.AllocateAndWrite(@namespace), memory.AllocateAndWrite(className));
         ThrowIfNull(@class, matchClass);
         return @class;
     }
-    nint GetMethodFromName(nint @class, string methodName)
+    nint GetMethodFromName(nint @class, ReadOnlySpan<char> methodName)
     {
         var method = Execute(exports[matchMethod], @class, memory.AllocateAndWrite(methodName), 0);
         ThrowIfNull(method, matchMethod);
         return method;
     }
-    string GetClassName(nint monoObject)
+    ReadOnlySpan<char> GetClassName(nint monoObject)
     {
         var @class = Execute(exports[getClass], monoObject);
         ThrowIfNull(@class, getClass);
@@ -184,8 +182,7 @@ public sealed class Injector : IDisposable
 
         return memory.ReadString(className, 256, Encoding.UTF8);
     }
-
-    string ReadMonoString(nint monoString)
+    ReadOnlySpan<char> ReadMonoString(nint monoString)
         => memory.ReadString(monoString + (Is64Bit ? 0x14 : 0xC), memory.Read<int>(monoString + (Is64Bit ? 0x10 : 0x8)) * 2, Encoding.Unicode);
 
     void RuntimeInvoke(nint method)
@@ -194,12 +191,7 @@ public sealed class Injector : IDisposable
         Execute(exports[rtInvoke], method, 0, 0, excPtr);
 
         var exc = (nint)memory.Read<int>(excPtr);
-        if (exc != 0)
-        {
-            var className = GetClassName(exc);
-            var message = ReadMonoString(memory.Read<int>(exc + (Is64Bit ? 0x20 : 0x10)));
-            throw new InjectorException($"The managed method threw an exception: ({className}) {message}");
-        }
+        if (exc != 0) throw new InjectorException($"Managed method threw exception: ({GetClassName(exc)}) {ReadMonoString(memory.Read<int>(exc + (Is64Bit ? 0x20 : 0x10)))}");
     }
     void CloseAssembly(nint assembly) => ThrowIfNull(Execute(exports[asmClose], assembly), asmClose);
 
@@ -207,17 +199,17 @@ public sealed class Injector : IDisposable
     {
         var retValPtr = Is64Bit ? memory.AllocateAndWrite(0L) : memory.AllocateAndWrite(0);
         var thread = Native.CreateRemoteThread(handle.DangerousGetHandle(), 0, 0, memory.AllocateAndWrite(Assemble(addr, retValPtr, args)), 0, 0, out _);
-        if (thread == 0) throw new InjectorException("Failed to create a remote thread", new Win32Exception(Marshal.GetLastWin32Error()));
+        if (thread == 0) throw new InjectorException("Failed to create remote thread", new Win32Exception(Marshal.GetLastWin32Error()));
 
-        if (Native.WaitForSingleObject(thread, -1) == 0xFFFFFFFF) throw new InjectorException("Failed to wait for a remote thread", new Win32Exception(Marshal.GetLastWin32Error()));
+        if (Native.WaitForSingleObject(thread, -1) == 0xFFFFFFFF) throw new InjectorException("Failed to wait for remote thread", new Win32Exception(Marshal.GetLastWin32Error()));
         var ret = Is64Bit ? (nint)memory.Read<long>(retValPtr) : memory.Read<int>(retValPtr);
-        if (ret == 0x00000000C0000005) throw new InjectorException($"An access violation occurred while executing {exports.First(e => e.Value == addr).Key}()");
+        if (ret == 0x00000000C0000005) throw new InjectorException($"Access violation while executing {exports.First(e => e.Value == addr).Key}()");
 
         return ret;
     }
 
-    ReadOnlySpan<byte> Assemble(nint funcPtr, nint retValPtr, nint[] args) => Is64Bit ? Assemble64(funcPtr, retValPtr, args) : Assemble86(funcPtr, retValPtr, args);
-    ReadOnlySpan<byte> Assemble86(nint funcPtr, nint retValPtr, nint[] args)
+    ReadOnlySpan<byte> Assemble(nint funcPtr, nint retValPtr, Span<nint> args) => Is64Bit ? Assemble64(funcPtr, retValPtr, args) : Assemble86(funcPtr, retValPtr, args);
+    ReadOnlySpan<byte> Assemble86(nint funcPtr, nint retValPtr, Span<nint> args)
     {
         Assembler asm = new();
         if (attach)
@@ -237,7 +229,7 @@ public sealed class Injector : IDisposable
 
         return asm.AsSpan();
     }
-    ReadOnlySpan<byte> Assemble64(nint funcPtr, nint retValPtr, nint[] args)
+    ReadOnlySpan<byte> Assemble64(nint funcPtr, nint retValPtr, Span<nint> args)
     {
         Assembler asm = new();
 

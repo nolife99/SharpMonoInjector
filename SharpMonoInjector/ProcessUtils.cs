@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -48,11 +49,11 @@ public static class ProcessUtils
             throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
 
         const int MAX_PATH = 260;
-        var path = stackalloc sbyte[MAX_PATH * Marshal.SizeOf<char>()];
+        var path = stackalloc sbyte[MAX_PATH];
 
         for (var i = 0; i < count; ++i) try
         {
-            if (new string(path, 0, Native.GetModuleFileNameEx(handle, ptrs[i], (nint)path, MAX_PATH)).Contains("mono", StringComparison.OrdinalIgnoreCase))
+            if (new string(path, 0, Native.GetModuleFileNameExA(handle, ptrs[i], (nint)path, MAX_PATH)).Contains("mono", StringComparison.OrdinalIgnoreCase))
             {
                 if (!Native.GetModuleInformation(handle, ptrs[i], out var info, bytesNeeded))
                     throw new InjectorException("Failed to get module information", new Win32Exception(Marshal.GetLastWin32Error()));
@@ -116,9 +117,7 @@ public static class ProcessUtils
     {
         try
         {
-            List<string> avs = [];
-            var defenderFlag = false;
-
+            ConcurrentBag<string> avs = [];
             using ManagementObjectSearcher searcher = new(@"\\" + Environment.MachineName + @"\root\SecurityCenter2", "SELECT * FROM AntivirusProduct");
             using var instances = searcher.Get();
 
@@ -147,9 +146,7 @@ public static class ProcessUtils
                     if (detect.EndsWith(p.ProcessName + ".exe", StringComparison.OrdinalIgnoreCase)) Trace.WriteLine("Antivirus Running: " + detect);
                 });
             });
-
-            if (defenderFlag) return false;
-            else return instances.Count > 0;
+            return instances.Count > 0;
         }
         catch (Exception e)
         {

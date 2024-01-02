@@ -28,35 +28,32 @@ public partial class MainWindowViewModel : ViewModel
             Trace.WriteLine("[MainWindowViewModel] - Checking Processes for Mono");
 
             var cp = Environment.ProcessId;
-            await Task.Run(() => Parallel.ForEach(Process.GetProcesses(), (p, l) =>
+            await Parallel.ForEachAsync(Process.GetProcesses(), async (p, t) =>
             {
                 using (p) try
                 {
-                    if (GetProcessUser(p) is not null && p.Id != cp)
+                    using ProcessHandle handle = new(p.Id, ProcessAccess.QueryInfo | ProcessAccess.ReadVM);
+                    if (!handle.IsInvalid && !GetProcessUser(handle, p.ProcessName).IsEmpty && p.Id != cp)
                     {
-                        using ProcessHandle handle = new(p.Id, ProcessAccess.QueryInfo | ProcessAccess.ReadVM);
-                        if (!handle.IsInvalid)
+                        Trace.WriteLine("\t" + p.ProcessName + ".exe");
+                        if (ProcessUtils.GetMonoModule(handle, out var mono))
                         {
-                            Trace.WriteLine("\t" + p.ProcessName + ".exe");
-                            if (ProcessUtils.GetMonoModule(handle, out var mono))
+                            Trace.WriteLine("\t\tMono found in process: " + p.ProcessName + ".exe");
+                            processes.Add(new()
                             {
-                                Trace.WriteLine("\t\tMono found in process: " + p.ProcessName + ".exe");
-                                processes.Add(new()
-                                {
-                                    MonoModule = mono,
-                                    Id = p.Id,
-                                    Name = p.ProcessName
-                                });
-                                l.Stop();
-                            }
+                                MonoModule = mono,
+                                Id = p.Id,
+                                Name = p.ProcessName
+                            });
                         }
                     }
                 }
                 catch (Exception e)
                 {
-                    Trace.WriteLine("\tERROR SCANNING: " + p.ProcessName + " - " + e.ToString());
+                    Trace.WriteLine("\tERROR SCANNING: " + p.ProcessName + " - " + e.Message);
                 }
-            }));
+            });
+            IsRefreshing = false;
 
             Processes = processes;
             if (processes.Count > 0)
@@ -69,39 +66,38 @@ public partial class MainWindowViewModel : ViewModel
                 Status = "No Mono process found";
                 Trace.WriteLine("No Mono process found");
             }
-            IsRefreshing = false;
         }, () => !IsRefreshing);
 
         BrowseCommand = new(() =>
         {
-            OpenFileDialog ofd = new()
+            OpenFileDialog dialog = new()
             {
                 Filter = ".NET Assemblies|*.dll",
-                Title = "Select assembly to inject",
+                Title = "Select assembly to inject"
             };
-            if (ofd.ShowDialog().Value) AssemblyPath = ofd.FileName;
+            if (dialog.ShowDialog().Value) AssemblyPath = dialog.FileName;
         });
 
         InjectCommand = new(async () =>
         {
-            using ProcessHandle handle = new(SelectedProcess.Id, ProcessAccess.All);
+            using ProcessHandle handle = new(SelectedProcess.Id);
             if (handle.IsInvalid)
             {
                 Status = "Failed to open process";
                 return;
             }
 
-            var filename = Path.GetFileName(AssemblyPath);
+            var filename = Path.GetFileName(assemblyPath);
             byte[] file;
 
             try
             {
                 Status = "Loading " + filename;
-                file = await File.ReadAllBytesAsync(AssemblyPath);
+                file = await File.ReadAllBytesAsync(assemblyPath);
             }
-            catch (IOException)
+            catch (IOException e)
             {
-                Status = "Failed to load file " + AssemblyPath;
+                Status = $"Failed to load {assemblyPath} {e.Message}";
                 return;
             }
 
@@ -132,11 +128,11 @@ public partial class MainWindowViewModel : ViewModel
                 }
             }
             IsExecuting = false;
-        }, () => SelectedProcess != null && File.Exists(AssemblyPath) && !string.IsNullOrEmpty(InjectClassName) && !string.IsNullOrEmpty(InjectMethodName) && !IsExecuting);
+        }, () => SelectedProcess != null && File.Exists(assemblyPath) && !string.IsNullOrEmpty(InjectClassName) && !string.IsNullOrEmpty(InjectMethodName) && !IsExecuting);
 
         EjectCommand = new(() =>
         {
-            using ProcessHandle handle = new(SelectedAssembly.ProcessId, ProcessAccess.All);
+            using ProcessHandle handle = new(SelectedAssembly.ProcessId);
             if (handle.IsInvalid)
             {
                 Status = "Failed to open process";
@@ -338,22 +334,22 @@ public partial class MainWindowViewModel : ViewModel
 
     #region Process Refresh Fix
 
-    static string GetProcessUser(Process process)
+    static ReadOnlySpan<char> GetProcessUser(ProcessHandle process, ReadOnlySpan<char> procName)
     {
-        var result = "";
+        ReadOnlySpan<char> result = "";
         nint token = 0;
 
         try
         {
-            Native.OpenProcessToken(process.Handle, 8, out token);
+            Native.OpenProcessToken(process.DangerousGetHandle(), 8, out token);
             using WindowsIdentity id = new(token);
 
-            var user = id.Name;
+            var user = id.Name.AsSpan();
             result = user.Contains('\\') ? user[(user.IndexOf('\\') + 1)..] : user;
         }
         catch (Exception e)
         {
-            Trace.WriteLine("\tError Getting User Process: " + process.ProcessName + " - " + e.Message);
+            Trace.WriteLine(string.Concat("\tError Getting User Process: ", procName, " - ", e.Message));
             return null;
         }
         finally

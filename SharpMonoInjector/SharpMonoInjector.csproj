@@ -1,12 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <OutputType>Library</OutputType>
 	<AssemblyName>smi-lib</AssemblyName>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AssemblyTitle>SharpMonoInjector wh0am1 Mod</AssemblyTitle>
     <Product>SharpMonoInjector wh0am1 Mod</Product>
-    <Copyright>Copyright ©  2020</Copyright>
+    <Copyright>Copyright © 2020</Copyright>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <FileVersion>1.0.0.0</FileVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

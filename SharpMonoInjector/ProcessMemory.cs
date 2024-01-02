@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -10,25 +11,25 @@ public sealed class ProcessMemory(ProcessHandle handle) : IDisposable
 {
     readonly List<(nint, int)> allocs = [];
 
-    public unsafe string ReadString(nint addr, int length, Encoding encoding)
+    public string ReadString(nint addr, int length, Encoding encoding)
     {
-        var bytes = stackalloc byte[length];
+        Span<byte> bytes = stackalloc byte[length];
         for (var i = 0; i < length; ++i)
         {
             var read = Read<byte>(addr + i);
-            if (read == 0x00)
+            if (read == 0)
             {
                 length = i;
                 break;
             }
             bytes[i] = read;
         }
-        return encoding.GetString(bytes, length);
+        return encoding.GetString(bytes[..length]);
     }
     public unsafe T Read<T>(nint addr) where T : unmanaged
     {
         T ret;
-        if (!Native.ReadProcessMemory(handle.DangerousGetHandle(), addr, (nint)(&ret), Marshal.SizeOf<T>()))
+        if (!ReadProcessMemory(handle.DangerousGetHandle(), addr, (nint)(&ret), Marshal.SizeOf<T>()))
             throw new InjectorException("Failed to read process memory", new Win32Exception(Marshal.GetLastWin32Error()));
         
         return ret;
@@ -40,13 +41,12 @@ public sealed class ProcessMemory(ProcessHandle handle) : IDisposable
         Write(addr, data);
         return addr;
     }
-    public nint AllocateAndWrite(string data) => AllocateAndWrite(Encoding.UTF8.GetBytes(data));
-    public nint AllocateAndWrite(int data) => AllocateAndWrite(BitConverter.GetBytes(data));
-    public nint AllocateAndWrite(long data) => AllocateAndWrite(BitConverter.GetBytes(data));
+    public nint AllocateAndWrite(ReadOnlySpan<char> data) => AllocateAndWrite(Encoding.UTF8.GetBytes(data.ToArray()));
+    public unsafe nint AllocateAndWrite<T>(T data) where T : unmanaged => AllocateAndWrite(new ReadOnlySpan<byte>(&data, Marshal.SizeOf<T>()));
 
     public nint Allocate(int size)
     {
-        var addr = Native.VirtualAllocEx(handle.DangerousGetHandle(), 0, size, AllocationType.MEM_COMMIT, MemoryProtection.PAGE_EXECUTE_READWRITE);
+        var addr = VirtualAllocEx(handle.DangerousGetHandle(), 0, size, 0x00001000, 0x40);
         if (addr == 0) throw new InjectorException("Failed to allocate process memory", new Win32Exception(Marshal.GetLastWin32Error()));
 
         allocs.Add((addr, size));
@@ -54,7 +54,7 @@ public sealed class ProcessMemory(ProcessHandle handle) : IDisposable
     }
     public unsafe void Write(nint addr, ReadOnlySpan<byte> data)
     {
-        fixed (void* ptr = data) if (!Native.WriteProcessMemory(handle.DangerousGetHandle(), addr, (nint)ptr, data.Length))
+        fixed (void* ptr = data) if (!WriteProcessMemory(handle.DangerousGetHandle(), addr, (nint)ptr, data.Length))
             throw new InjectorException("Failed to write process memory", new Win32Exception(Marshal.GetLastWin32Error()));
     }
 
@@ -67,7 +67,51 @@ public sealed class ProcessMemory(ProcessHandle handle) : IDisposable
 
     void Dispose(bool disposing)
     {
-        allocs.ForEach(kvp => Native.VirtualFreeEx(handle.DangerousGetHandle(), kvp.Item1, kvp.Item2, MemoryFreeType.MEM_DECOMMIT));
+        allocs.ForEach(kvp => VirtualFreeEx(handle.DangerousGetHandle(), kvp.Item1, kvp.Item2, 0x4000));
         if (disposing) allocs.Clear();
     }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static extern bool ReadProcessMemory(nint hProcess, nint lpBaseAddress, nint lpBuffer, int nSize, int lpNumberOfBytesWritten = 0);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static extern bool WriteProcessMemory(nint hProcess, nint lpBaseAddress, nint lpBuffer, int nSize, int lpNumberOfBytesRead = 0);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static extern nint VirtualAllocEx(nint hProcess, nint lpAddress, int dwSize, int flAllocationType, int flProtect);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static extern bool VirtualFreeEx(nint hProcess, nint lpAddress, int dwSize, int dwFreeType);
+}
+public class ProcessHandle : SafeHandle
+{
+    public override bool IsInvalid => handle == 0;
+    public ProcessHandle(int processId, ProcessAccess rights = ProcessAccess.All) : base(0, true) => handle = OpenProcess(rights, false, processId);
+
+    protected override bool ReleaseHandle() => Native.CloseHandle(handle);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static extern nint OpenProcess(ProcessAccess dwDesiredAccess, bool bInheritHandle, int processId);
+}
+[Flags] public enum ProcessAccess
+{
+    All = 0x1FFFFF,
+    CreateProcess = 0x0080,
+    CreateThread = 0x0002,
+    Duplicate = 0x0040,
+    QueryInfo = 0x0400,
+    QueryLimitedInfo = 0x1000,
+    SetInfo = 0x0200,
+    SetQuota = 0x0100,
+    SuspendResume = 0x0800,
+    Terminate = 0x0001,
+    OperationVM = 0x0008,
+    ReadVM = 0x0010,
+    WriteVM = 0x0020,
+    Sync = 0x00100000
 }
