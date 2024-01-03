@@ -42,7 +42,7 @@ public sealed class ProcessMemory(ProcessHandle handle) : IDisposable
         return addr;
     }
     public nint AllocateAndWrite(ReadOnlySpan<char> data) => AllocateAndWrite(Encoding.UTF8.GetBytes(data.ToArray()));
-    public unsafe nint AllocateAndWrite<T>(T data) where T : unmanaged => AllocateAndWrite(new ReadOnlySpan<byte>(&data, Marshal.SizeOf<T>()));
+    public nint AllocateAndWrite<T>(T data) where T : unmanaged => AllocateAndWrite(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, byte>(ref data), Marshal.SizeOf<T>()));
 
     public nint Allocate(int size)
     {

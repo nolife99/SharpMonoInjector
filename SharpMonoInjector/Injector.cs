@@ -187,7 +187,7 @@ public sealed class Injector : IDisposable
 
     void RuntimeInvoke(nint method)
     {
-        var excPtr = Is64Bit ? memory.AllocateAndWrite(0L) : memory.AllocateAndWrite(0);
+        var excPtr = Is64Bit ? memory.Allocate(8) : memory.Allocate(4);
         Execute(exports[rtInvoke], method, 0, 0, excPtr);
 
         var exc = (nint)memory.Read<int>(excPtr);
@@ -197,7 +197,7 @@ public sealed class Injector : IDisposable
 
     nint Execute(nint addr, params nint[] args)
     {
-        var retValPtr = Is64Bit ? memory.AllocateAndWrite(0L) : memory.AllocateAndWrite(0);
+        var retValPtr = Is64Bit ? memory.Allocate(8) : memory.Allocate(4);
         var thread = Native.CreateRemoteThread(handle.DangerousGetHandle(), 0, 0, memory.AllocateAndWrite(Assemble(addr, retValPtr, args)), 0, 0, out _);
         if (thread == 0) throw new InjectorException("Failed to create remote thread", new Win32Exception(Marshal.GetLastWin32Error()));
 

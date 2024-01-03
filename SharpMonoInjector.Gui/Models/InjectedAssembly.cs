@@ -1,6 +1,6 @@
 ﻿namespace SharpMonoInjector.Gui.Models;
 
-public class InjectedAssembly
+public readonly struct InjectedAssembly
 {
     public int ProcessId { get; init; }
     public nint Address { get; init; }

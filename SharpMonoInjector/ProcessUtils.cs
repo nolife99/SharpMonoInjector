@@ -126,7 +126,7 @@ public static class ProcessUtils
                 Trace.WriteLine("Antivirus Installed: True");
                 StringBuilder installedAVs = new("Installed Antivirus:\n");
 
-                Parallel.ForEach(instances.Cast<ManagementBaseObject>(), av =>
+                instances.AsParallel().Cast<ManagementBaseObject>().ForAll(av =>
                 {
                     using (av)
                     {
