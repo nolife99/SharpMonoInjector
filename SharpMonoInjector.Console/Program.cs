@@ -68,17 +68,14 @@ static class Program
     static void Inject(Injector injector, CommandLineArguments args)
     {
         byte[] assembly;
-        if (args.GetStringArg("-a", out var assemblyPath))
+        if (args.GetStringArg("-a", out var assemblyPath)) try
         {
-            try
-            {
-                assembly = File.ReadAllBytes(assemblyPath);
-            }
-            catch
-            {
-                System.Console.WriteLine("Could not read the file " + assemblyPath);
-                return;
-            }
+            assembly = File.ReadAllBytes(assemblyPath.ToString());
+        }
+        catch
+        {
+            System.Console.WriteLine(string.Concat("Could not read the file ", assemblyPath));
+            return;
         }
         else
         {

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -41,7 +42,7 @@ public sealed class ProcessMemory(ProcessHandle handle) : IDisposable
         Write(addr, data);
         return addr;
     }
-    public nint AllocateAndWrite(ReadOnlySpan<char> data) => AllocateAndWrite(Encoding.UTF8.GetBytes(data.ToArray()));
+    public nint AllocateAndWrite(ReadOnlySpan<char> data) => AllocateAndWrite(Encoding.ASCII.GetBytes(data.ToArray()));
     public nint AllocateAndWrite<T>(T data) where T : unmanaged => AllocateAndWrite(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, byte>(ref data), Marshal.SizeOf<T>()));
 
     public nint Allocate(int size)
@@ -67,7 +68,7 @@ public sealed class ProcessMemory(ProcessHandle handle) : IDisposable
 
     void Dispose(bool disposing)
     {
-        allocs.ForEach(kvp => VirtualFreeEx(handle.DangerousGetHandle(), kvp.Item1, kvp.Item2, 0x4000));
+        allocs.AsParallel().ForAll(kvp => VirtualFreeEx(handle.DangerousGetHandle(), kvp.Item1, kvp.Item2, 0x4000));
         if (disposing) allocs.Clear();
     }
 

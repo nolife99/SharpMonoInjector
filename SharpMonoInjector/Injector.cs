@@ -51,7 +51,7 @@ public sealed class Injector : IDisposable
     public Injector(ReadOnlySpan<char> processName)
     {
         processName = processName[..processName.IndexOf(".exe")];
-        using var process = Process.GetProcessesByName(processName.ToString()).AsParallel().FirstOrDefault() ?? throw new InjectorException($"Couldn't find process with name '{processName}'");
+        using var process = Process.GetProcessesByName(processName.ToString()).FirstOrDefault() ?? throw new InjectorException($"Couldn't find process with name '{processName}'");
 
         if ((handle = new(process.Id)).IsInvalid) throw new InjectorException($"Failed to open process with ID {process.Id}", new Win32Exception(Marshal.GetLastWin32Error()));
         Is64Bit = ProcessUtils.Is64BitProcess(handle);
@@ -142,7 +142,7 @@ public sealed class Injector : IDisposable
         var rawImage = Execute(exports[openDataImage], memory.AllocateAndWrite(assembly), assembly.Length, 1, statusPtr);
 
         var status = memory.Read<int>(statusPtr);
-        if (status != 0) throw new InjectorException($"{openDataImage}() failed: {memory.ReadString(Execute(exports[strErr], status), 256, Encoding.UTF8)}");
+        if (status != 0) throw new InjectorException($"{openDataImage}() failed: {memory.ReadString(Execute(exports[strErr], status), 256, Encoding.ASCII)}");
         return rawImage;
     }
     nint OpenAssemblyFromImage(nint image)
@@ -151,7 +151,7 @@ public sealed class Injector : IDisposable
         var assembly = Execute(exports[openImageAsm], image, memory.Allocate(1), statusPtr, 0);
 
         var status = memory.Read<int>(statusPtr);
-        if (status != 0) throw new InjectorException($"{openImageAsm}() failed: {memory.ReadString(Execute(exports[strErr], status), 256, Encoding.UTF8)}");
+        if (status != 0) throw new InjectorException($"{openImageAsm}() failed: {memory.ReadString(Execute(exports[strErr], status), 256, Encoding.ASCII)}");
         return assembly;
     }
     nint GetImageFromAssembly(nint assembly)
@@ -180,7 +180,7 @@ public sealed class Injector : IDisposable
         var className = Execute(exports[getName], @class);
         ThrowIfNull(className, getName);
 
-        return memory.ReadString(className, 256, Encoding.UTF8);
+        return memory.ReadString(className, 256, Encoding.ASCII);
     }
     ReadOnlySpan<char> ReadMonoString(nint monoString)
         => memory.ReadString(monoString + (Is64Bit ? 0x14 : 0xC), memory.Read<int>(monoString + (Is64Bit ? 0x10 : 0x8)) * 2, Encoding.Unicode);
@@ -221,10 +221,12 @@ public sealed class Injector : IDisposable
             asm.AddEsp(4);
         }
 
-        for (var i = args.Length - 1; i >= 0; --i) asm.Push(args[i]);
+        var size = args.Length;
+        for (var i = size - 1; i >= 0; --i) asm.Push(args[i]);
+
         asm.MovEax(funcPtr);
         asm.CallEax();
-        asm.AddEsp((byte)(args.Length * 4));
+        asm.AddEsp((byte)(size << 2));
         asm.MovEaxTo(retValPtr);
         asm.Return();
 

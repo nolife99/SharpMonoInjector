@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace SharpMonoInjector;
@@ -9,7 +7,7 @@ namespace SharpMonoInjector;
 public readonly ref struct Assembler
 {
     readonly List<byte> asm;
-    public Assembler() => asm = new(16);
+    public Assembler() => asm = [];
 
     public void MovRax(nint arg)
     {
@@ -72,8 +70,12 @@ public readonly ref struct Assembler
     public ReadOnlySpan<byte> Compile() => CollectionsMarshal.AsSpan(asm);
 }
 
-// Unused
-unsafe class PrimitiveCollection<T> : IList<T> where T : unmanaged
+
+/* 
+using System.Runtime.CompilerServices;
+using System.Collections;
+
+unsafe class PrimitiveCollection<T> : ICollection<T> where T : unmanaged, IEquatable<T>
 {
     void* buf;
     int count, capacity;
@@ -82,23 +84,19 @@ unsafe class PrimitiveCollection<T> : IList<T> where T : unmanaged
     public int Count => count;
     public bool IsReadOnly => false;
 
-    public T this[int index]
-    {
-        get => ThrowIfIndexOverflow(index) ? Unsafe.ReadUnaligned<T>(Unsafe.Add<T>(buf, index)) : default;
-        set
-        {
-            if (ThrowIfIndexOverflow(index)) Unsafe.WriteUnaligned(Unsafe.Add<T>(buf, index), value);
-        }
-    }
+    public PrimitiveCollection() => buf = NativeMemory.Alloc((uint)(capacity = 16) * (elementSize = (uint)sizeof(T)));
+    ~PrimitiveCollection() => NativeMemory.Free(buf);
 
-    public PrimitiveCollection() => buf = NativeMemory.Alloc(16, elementSize = (uint)sizeof(T));
-    ~PrimitiveCollection() => NativeMemory.Free(buf); 
-    
+    public void CopyTo(T[] arr, int index)
+    {
+        var realLen = Math.Min(count, arr.Length - index);
+        new ReadOnlySpan<T>(buf, realLen).CopyTo(new(arr, index, realLen));
+    }
+    public ReadOnlySpan<T> AsSpan() => new(buf, count);
+
     public void Clear()
     {
-        NativeMemory.Free(buf);
-        buf = NativeMemory.Alloc(0);
-
+        buf = NativeMemory.Realloc(buf, 0);
         count = 0;
         capacity = 0;
     }
@@ -117,58 +115,6 @@ unsafe class PrimitiveCollection<T> : IList<T> where T : unmanaged
         values.CopyTo(new(Unsafe.Add<T>(buf, count), len));
         count = total;
     }
-
-    public ReadOnlySpan<byte> AsBytes() => new(buf, count * (int)elementSize);
-    void EnsureCapacity(int minimum) => buf = NativeMemory.Realloc(buf, (uint)Math.Max(capacity += capacity / 2, minimum) * elementSize);
-
-    public bool Contains(T item)
-    {
-        for (var i = 0; i < count; ++i) if (item.Equals(Unsafe.ReadUnaligned<T>(Unsafe.Add<T>(buf, i)))) return true;
-        return false;
-    }
-    public void CopyTo(T[] arr, int index)
-    {
-        var realLen = Math.Min(count, arr.Length - index);
-        new ReadOnlySpan<T>(buf, realLen).CopyTo(new(arr, index, realLen));
-    }
-
-    public void Insert(int index, T item)
-    {
-        ThrowIfIndexOverflow(index);
-        if (count == capacity) EnsureCapacityInsert(index);
-        else if (index < count) NativeMemory.Copy(Unsafe.Add<T>(buf, index), Unsafe.Add<T>(buf, index + 1), (uint)(count - index) * elementSize);
-
-        Unsafe.WriteUnaligned(Unsafe.Add<T>(buf, index), item);
-        ++count;
-    }
-    public void InsertRange(int index, ReadOnlySpan<T> items)
-    {
-        var size = items.Length;
-        if (count > 0)
-        {
-            if (capacity - count < size) EnsureCapacityInsert(index, size);
-            else if (index < count) NativeMemory.Copy(Unsafe.Add<T>(buf, index), Unsafe.Add<T>(buf, index + size), (uint)(count - index) * elementSize);
-
-            if (Unsafe.AreSame(ref Unsafe.AsRef<T>(buf), ref MemoryMarshal.GetReference(items)))
-            {
-                NativeMemory.Copy(buf, Unsafe.Add<T>(buf, index), (uint)index * elementSize);
-                NativeMemory.Copy(Unsafe.Add<T>(buf, index + size), Unsafe.Add<T>(buf, index * 2), (uint)(count - index) * elementSize);
-            }
-            else items.CopyTo(new(Unsafe.Add<T>(buf, index), size));
-
-            count += size;
-        }
-    }
-    void EnsureCapacityInsert(int indexToInsert, int insertionCount = 1)
-    {
-        var newBuf = NativeMemory.Alloc((uint)Math.Max(count + insertionCount, capacity * 1.5f) * elementSize);
-        if (indexToInsert != 0) NativeMemory.Copy(buf, newBuf, (uint)indexToInsert * elementSize);
-        if (count != indexToInsert) NativeMemory.Copy(Unsafe.Add<T>(buf, indexToInsert), Unsafe.Add<T>(newBuf, indexToInsert + insertionCount), (uint)(count - indexToInsert) * elementSize);
-
-        NativeMemory.Free(buf);
-        buf = newBuf;
-    }
-
     public bool Remove(T item)
     {
         try
@@ -183,17 +129,15 @@ unsafe class PrimitiveCollection<T> : IList<T> where T : unmanaged
     }
     public void RemoveAt(int index)
     {
-        ThrowIfIndexOverflow(index);
+        if ((uint)index >= (uint)count) throw new IndexOutOfRangeException($"Index: {index} | Count: {count}");
         --count;
         if (index < count) NativeMemory.Copy(Unsafe.Add<T>(buf, index + 1), Unsafe.Add<T>(buf, index), (uint)(count - index) * elementSize);
     }
-    public int IndexOf(T item) => new ReadOnlySpan<byte>(buf, count * sizeof(T)).IndexOf(new ReadOnlySpan<byte>(&item, sizeof(T)));
 
-    bool ThrowIfIndexOverflow(int index)
-    {
-        if ((uint)index >= (uint)count) throw new IndexOutOfRangeException($"Index: {index} | Count: {count}");
-        return true;
-    }
+    public bool Contains(T item) => AsSpan().Contains(item);
+    public int IndexOf(T item) => AsSpan().IndexOf(item);
+
+    void EnsureCapacity(int minimum) => buf = NativeMemory.Realloc(buf, (uint)Math.Max(capacity += capacity / 2, minimum) * elementSize);
 
     public IEnumerator<T> GetEnumerator() => new Enumerator(this);
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -216,7 +160,7 @@ unsafe class PrimitiveCollection<T> : IList<T> where T : unmanaged
         void IEnumerator.Reset() => _index = -1;
         void IDisposable.Dispose() => _index = int.MaxValue;
 
-        readonly T IEnumerator<T>.Current => Unsafe.ReadUnaligned<T>(Unsafe.Add<T>(data.buf, _index));
-        readonly object IEnumerator.Current => Unsafe.ReadUnaligned<T>(Unsafe.Add<T>(data.buf, _index));
+        readonly T IEnumerator<T>.Current => Unsafe.ReadUnaligned<T>(Unsafe.Add<T>(data.buf, _index < data.Count ? _index : data.Count));
+        readonly object IEnumerator.Current => Unsafe.ReadUnaligned<T>(Unsafe.Add<T>(data.buf, _index < data.Count ? _index : data.Count));
     }
-}
+} */

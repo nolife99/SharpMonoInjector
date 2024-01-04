@@ -7,7 +7,6 @@ using System.Linq;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
 using Microsoft.Win32;
 
 namespace SharpMonoInjector;
@@ -139,9 +138,9 @@ public static class ProcessUtils
             }
             else Trace.WriteLine("Antivirus Installed: False");
 
-            Parallel.ForEach(Process.GetProcesses(), p =>
+            Process.GetProcesses().AsParallel().ForAll(p =>
             {
-                using (p) Parallel.ForEach(avs, detect =>
+                using (p) avs.AsParallel().ForAll(detect =>
                 {
                     if (detect.EndsWith(p.ProcessName + ".exe", StringComparison.OrdinalIgnoreCase)) Trace.WriteLine("Antivirus Running: " + detect);
                 });
