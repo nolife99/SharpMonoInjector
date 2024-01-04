@@ -23,7 +23,7 @@ static class Program
             return;
         }
 
-        var cla = new CommandLineArguments(args);
+        CommandLineArguments cla = new(args);
         var inject = cla.IsSwitchPresent("inject");
         var eject = cla.IsSwitchPresent("eject");
 

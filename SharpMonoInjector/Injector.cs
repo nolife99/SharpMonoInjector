@@ -198,6 +198,7 @@ public sealed class Injector : IDisposable
     nint Execute(nint addr, params nint[] args)
     {
         var retValPtr = Is64Bit ? memory.Allocate(8) : memory.Allocate(4);
+
         var thread = Native.CreateRemoteThread(handle.DangerousGetHandle(), 0, 0, memory.AllocateAndWrite(Assemble(addr, retValPtr, args)), 0, 0, out _);
         if (thread == 0) throw new InjectorException("Failed to create remote thread", new Win32Exception(Marshal.GetLastWin32Error()));
 
@@ -227,7 +228,7 @@ public sealed class Injector : IDisposable
         asm.MovEaxTo(retValPtr);
         asm.Return();
 
-        return asm.AsSpan();
+        return asm.Compile();
     }
     ReadOnlySpan<byte> Assemble64(nint funcPtr, nint retValPtr, Span<nint> args)
     {
@@ -255,6 +256,6 @@ public sealed class Injector : IDisposable
         asm.MovRaxTo(retValPtr);
         asm.Return();
 
-        return asm.AsSpan();
+        return asm.Compile();
     }
 }

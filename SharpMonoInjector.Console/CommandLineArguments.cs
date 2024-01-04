@@ -3,9 +3,9 @@ using System.Linq;
 
 namespace SharpMonoInjector.Console;
 
-public class CommandLineArguments(string[] args)
+public ref struct CommandLineArguments(string[] args)
 {
-    public bool IsSwitchPresent(string name) => args.Any(arg => arg == name);
+    public readonly bool IsSwitchPresent(string name) => args.Any(arg => arg == name);
 
     public bool GetLongArg(string name, out long value)
     {
@@ -19,7 +19,7 @@ public class CommandLineArguments(string[] args)
         value = 0;
         return false;
     }
-    public bool GetStringArg(string name, out string value)
+    public readonly bool GetStringArg(string name, out string value)
     {
         for (var i = 0; i < args.Length; ++i) if (args[i] == name) 
         {
