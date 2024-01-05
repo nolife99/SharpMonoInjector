@@ -2,6 +2,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows;
@@ -71,14 +72,14 @@ public partial class MainWindowViewModel : ViewModel
             OpenFileDialog dialog = new()
             {
                 Filter = ".NET Assemblies|*.dll",
-                Title = "Select assembly to inject"
+                Title = "Pick assembly to inject"
             };
             if (dialog.ShowDialog().Value) AssemblyPath = dialog.FileName;
         });
 
         InjectCommand = new(async () =>
         {
-            using ProcessHandle handle = new(SelectedProcess.Id);
+            using ProcessHandle handle = new(selectedProcess.Id);
             if (handle.IsInvalid)
             {
                 Status = "Failed to open process";
@@ -102,14 +103,14 @@ public partial class MainWindowViewModel : ViewModel
             IsExecuting = true;
             Status = "Injecting " + filename;
 
-            using (Injector injector = new(handle, SelectedProcess.MonoModule))
+            using (Injector injector = new(handle, selectedProcess.MonoModule))
             {
                 try
                 {
-                    var asm = await Task.Run(() => injector.Inject(file, InjectNamespace, InjectClassName, InjectMethodName));
+                    var asm = await Task.Run(() => injector.Inject(file, injectNamespace, injectClassName, injectMethodName));
                     InjectedAssemblies = injectedAssemblies.Add(new()
                     {
-                        ProcessId = SelectedProcess.Id,
+                        ProcessId = selectedProcess.Id,
                         Address = asm,
                         Name = filename,
                         Is64Bit = injector.Is64Bit
@@ -126,11 +127,11 @@ public partial class MainWindowViewModel : ViewModel
                 }
             }
             IsExecuting = false;
-        }, () => SelectedProcess.Id != 0 && File.Exists(assemblyPath) && !string.IsNullOrEmpty(InjectClassName) && !string.IsNullOrEmpty(InjectMethodName) && !IsExecuting);
+        }, () => selectedProcess.Id != 0 && File.Exists(assemblyPath) && !string.IsNullOrWhiteSpace(injectClassName) && !string.IsNullOrWhiteSpace(injectMethodName) && !IsExecuting);
 
         EjectCommand = new(() =>
         {
-            using ProcessHandle handle = new(SelectedAssembly.ProcessId);
+            using ProcessHandle handle = new(selectedAssembly.ProcessId);
             if (handle.IsInvalid)
             {
                 Status = "Failed to open process";
@@ -138,16 +139,16 @@ public partial class MainWindowViewModel : ViewModel
             }
 
             IsExecuting = true;
-            Status = "Ejecting " + SelectedAssembly.Name;
+            Status = "Ejecting " + selectedAssembly.Name;
 
             ProcessUtils.GetMonoModule(handle, out var mono);
             using (Injector injector = new(handle, mono))
             {
                 try
                 {
-                    injector.Eject(SelectedAssembly.Address, EjectNamespace, EjectClassName, EjectMethodName);
-                    InjectedAssemblies = injectedAssemblies.Remove(SelectedAssembly);
-                    Status = "Ejected " + SelectedAssembly.Name;
+                    injector.Eject(selectedAssembly.Address, ejectNamespace, ejectClassName, ejectMethodName);
+                    InjectedAssemblies = injectedAssemblies.Remove(selectedAssembly);
+                    Status = "Ejected " + selectedAssembly.Name;
                 }
                 catch (InjectorException ie)
                 {
@@ -159,7 +160,7 @@ public partial class MainWindowViewModel : ViewModel
                 }
             }
             IsExecuting = false;
-        }, () => SelectedAssembly.ProcessId != 0 && !string.IsNullOrEmpty(EjectClassName) && !string.IsNullOrEmpty(EjectMethodName) && !IsExecuting);
+        }, () => selectedAssembly.ProcessId != 0 && !string.IsNullOrWhiteSpace(ejectClassName) && !string.IsNullOrWhiteSpace(ejectMethodName) && !IsExecuting);
 
         CopyStatusCommand = new(() => Clipboard.SetText(Status));
     }
@@ -328,7 +329,7 @@ public partial class MainWindowViewModel : ViewModel
 
     static ReadOnlySpan<char> GetProcessUser(ProcessHandle process, ReadOnlySpan<char> procName)
     {
-        nint token = 0;
+        Unsafe.SkipInit(out nint token);
         try
         {
             Native.OpenProcessToken(process.DangerousGetHandle(), 8, out token);
@@ -340,7 +341,7 @@ public partial class MainWindowViewModel : ViewModel
         catch (Exception e)
         {
             Trace.WriteLine(string.Concat("\tError Getting User Process: ", procName, " - ", e.Message));
-            return ReadOnlySpan<char>.Empty;
+            return [];
         }
         finally
         {

@@ -132,52 +132,52 @@ public sealed class Injector : IDisposable
 
     nint GetRootDomain()
     {
-        var rootDomain = Execute(exports[getRootDomain]);
+        var rootDomain = Execute(exports[getRootDomain], []);
         ThrowIfNull(rootDomain, getRootDomain);
         return rootDomain;
     }
     nint OpenImageFromData(ReadOnlySpan<byte> assembly)
     {
         var statusPtr = memory.Allocate(4);
-        var rawImage = Execute(exports[openDataImage], memory.AllocateAndWrite(assembly), assembly.Length, 1, statusPtr);
+        var rawImage = Execute(exports[openDataImage], [memory.AllocateAndWrite(assembly), assembly.Length, 1, statusPtr]);
 
         var status = memory.Read<int>(statusPtr);
-        if (status != 0) throw new InjectorException($"{openDataImage}() failed: {memory.ReadString(Execute(exports[strErr], status), 256, Encoding.ASCII)}");
+        if (status != 0) throw new InjectorException($"{openDataImage}() failed: {memory.ReadString(Execute(exports[strErr], [status]), 256, Encoding.ASCII)}");
         return rawImage;
     }
     nint OpenAssemblyFromImage(nint image)
     {
         var statusPtr = memory.Allocate(4);
-        var assembly = Execute(exports[openImageAsm], image, memory.Allocate(1), statusPtr, 0);
+        var assembly = Execute(exports[openImageAsm], [image, memory.Allocate(1), statusPtr, 0]);
 
         var status = memory.Read<int>(statusPtr);
-        if (status != 0) throw new InjectorException($"{openImageAsm}() failed: {memory.ReadString(Execute(exports[strErr], status), 256, Encoding.ASCII)}");
+        if (status != 0) throw new InjectorException($"{openImageAsm}() failed: {memory.ReadString(Execute(exports[strErr], [status]), 256, Encoding.ASCII)}");
         return assembly;
     }
     nint GetImageFromAssembly(nint assembly)
     {
-        var image = Execute(exports[asmImage], assembly);
+        var image = Execute(exports[asmImage], [assembly]);
         ThrowIfNull(image, asmImage);
         return image;
     }
     nint GetClassFromName(nint image, ReadOnlySpan<char> @namespace, ReadOnlySpan<char> className)
     {
-        var @class = Execute(exports[matchClass], image, memory.AllocateAndWrite(@namespace), memory.AllocateAndWrite(className));
+        var @class = Execute(exports[matchClass], [image, memory.AllocateAndWrite(@namespace), memory.AllocateAndWrite(className)]);
         ThrowIfNull(@class, matchClass);
         return @class;
     }
     nint GetMethodFromName(nint @class, ReadOnlySpan<char> methodName)
     {
-        var method = Execute(exports[matchMethod], @class, memory.AllocateAndWrite(methodName), 0);
+        var method = Execute(exports[matchMethod], [@class, memory.AllocateAndWrite(methodName), 0]);
         ThrowIfNull(method, matchMethod);
         return method;
     }
     ReadOnlySpan<char> GetClassName(nint monoObject)
     {
-        var @class = Execute(exports[getClass], monoObject);
+        var @class = Execute(exports[getClass], [monoObject]);
         ThrowIfNull(@class, getClass);
 
-        var className = Execute(exports[getName], @class);
+        var className = Execute(exports[getName], [@class]);
         ThrowIfNull(className, getName);
 
         return memory.ReadString(className, 256, Encoding.ASCII);
@@ -188,14 +188,14 @@ public sealed class Injector : IDisposable
     void RuntimeInvoke(nint method)
     {
         var excPtr = Is64Bit ? memory.Allocate(8) : memory.Allocate(4);
-        Execute(exports[rtInvoke], method, 0, 0, excPtr);
+        Execute(exports[rtInvoke], [method, 0, 0, excPtr]);
 
         var exc = (nint)memory.Read<int>(excPtr);
         if (exc != 0) throw new InjectorException($"Managed method threw exception: ({GetClassName(exc)}) {ReadMonoString(memory.Read<int>(exc + (Is64Bit ? 0x20 : 0x10)))}");
     }
-    void CloseAssembly(nint assembly) => ThrowIfNull(Execute(exports[asmClose], assembly), asmClose);
+    void CloseAssembly(nint assembly) => ThrowIfNull(Execute(exports[asmClose], [assembly]), asmClose);
 
-    nint Execute(nint addr, params nint[] args)
+    nint Execute(nint addr, ReadOnlySpan<nint> args)
     {
         var retValPtr = Is64Bit ? memory.Allocate(8) : memory.Allocate(4);
 
@@ -209,8 +209,8 @@ public sealed class Injector : IDisposable
         return ret;
     }
 
-    ReadOnlySpan<byte> Assemble(nint funcPtr, nint retValPtr, Span<nint> args) => Is64Bit ? Assemble64(funcPtr, retValPtr, args) : Assemble86(funcPtr, retValPtr, args);
-    ReadOnlySpan<byte> Assemble86(nint funcPtr, nint retValPtr, Span<nint> args)
+    ReadOnlySpan<byte> Assemble(nint funcPtr, nint retValPtr, ReadOnlySpan<nint> args) => Is64Bit ? Assemble64(funcPtr, retValPtr, args) : Assemble86(funcPtr, retValPtr, args);
+    ReadOnlySpan<byte> Assemble86(nint funcPtr, nint retValPtr, ReadOnlySpan<nint> args)
     {
         Assembler asm = new();
         if (attach)
@@ -232,7 +232,7 @@ public sealed class Injector : IDisposable
 
         return asm.Compile();
     }
-    ReadOnlySpan<byte> Assemble64(nint funcPtr, nint retValPtr, Span<nint> args)
+    ReadOnlySpan<byte> Assemble64(nint funcPtr, nint retValPtr, ReadOnlySpan<nint> args)
     {
         Assembler asm = new();
 

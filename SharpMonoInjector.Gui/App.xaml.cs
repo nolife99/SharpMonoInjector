@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Windows;
 
 namespace SharpMonoInjector.Gui;
@@ -9,8 +10,8 @@ public partial class App : Application
 {
     public App()
     {
-        var stream = File.CreateText(Environment.CurrentDirectory + "\\DebugLog.txt");
-        TextWriterTraceListener listener = new(stream);
+        StreamWriter output = new(Path.Combine(Environment.CurrentDirectory, "trace.log"), false, Encoding.ASCII);
+        TextWriterTraceListener listener = new(output);
 
         Trace.Listeners.Add(listener);
         Trace.AutoFlush = true;
@@ -18,7 +19,7 @@ public partial class App : Application
         Exit += (_, _) =>
         {
             listener.Dispose();
-            stream.Dispose();
+            output.Dispose();
         };
     }
 }

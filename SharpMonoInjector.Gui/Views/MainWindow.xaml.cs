@@ -14,9 +14,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
 #if RELEASE
-        if (!new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator) && MessageBox.Show(
-            "It is recommended that you run this tool as Administrator in order to improve injection.\nRun as Administrator?", 
-            "SharpMonoInjector", 
+        using (var id = WindowsIdentity.GetCurrent()) if (!new WindowsPrincipal(id).IsInRole((int)WindowsBuiltInRole.Administrator) && MessageBox.Show(
+            "It is recommended that you run this tool as Administrator in order to improve injection.\nRun as Administrator?", "SharpMonoInjector", 
             MessageBoxButton.YesNo) is MessageBoxResult.Yes)
         {
             Process.Start(new ProcessStartInfo(Environment.ProcessPath)
@@ -24,7 +23,7 @@ public partial class MainWindow : Window
                 Verb = "runas",
                 UseShellExecute = true
             });
-            Environment.Exit(0);
+            return;
         }
 #endif
         InitializeComponent();
@@ -34,12 +33,7 @@ public partial class MainWindow : Window
 
     void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
     void Window_Exit(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
-    void Window_Minimize(object sender, RoutedEventArgs e) => Application.Current.MainWindow.WindowState = WindowState.Minimized;
-    void Window_Maximize(object sender, RoutedEventArgs e)
-    {
-        if (Application.Current.MainWindow.WindowState is WindowState.Maximized) Application.Current.MainWindow.WindowState = WindowState.Normal;
-        else Application.Current.MainWindow.WindowState = WindowState.Maximized;
-    }
+    void Window_Minimize(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 
     #endregion
 }

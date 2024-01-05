@@ -9,67 +9,66 @@ public readonly ref struct Assembler
     readonly List<byte> asm;
     public Assembler() => asm = [];
 
+    public void CallRax() => asm.AddRange(stackalloc byte[] { 0xFF, 0xD0 });
     public void MovRax(nint arg)
     {
-        asm.AddRange([0x48, 0xB8]);
-        asm.AddRange(BitConverter.GetBytes(arg));
+        asm.AddRange(stackalloc byte[] { 0x48, 0xB8 });
+        asm.AddRange(MemoryMarshal.AsBytes([arg]));
     }
-    public void MovRcx(nint arg)
-    {
-        asm.AddRange([0x48, 0xB9]);
-        asm.AddRange(BitConverter.GetBytes(arg));
-    }
-    public void MovRdx(nint arg)
-    {
-        asm.AddRange([0x48, 0xBA]);
-        asm.AddRange(BitConverter.GetBytes(arg));
-    }
-    public void MovR8(nint arg)
-    {
-        asm.AddRange([0x49, 0xB8]);
-        asm.AddRange(BitConverter.GetBytes(arg));
-    }
-    public void MovR9(nint arg)
-    {
-        asm.AddRange([0x49, 0xB9]);
-        asm.AddRange(BitConverter.GetBytes(arg));
-    }
-
-    public void SubRsp(byte arg) => asm.AddRange([0x48, 0x83, 0xEC, arg]);
-    public void CallRax() => asm.AddRange([0xFF, 0xD0]);
-    public void AddRsp(byte arg) => asm.AddRange([0x48, 0x83, 0xC4, arg]);
-
     public void MovRaxTo(nint dest)
     {
         asm.AddRange([0x48, 0xA3]);
         asm.AddRange(BitConverter.GetBytes(dest));
     }
+    public void MovRcx(nint arg)
+    {
+        asm.AddRange(stackalloc byte[] { 0x48, 0xB9 });
+        asm.AddRange(MemoryMarshal.AsBytes([arg]));
+    }
+    public void MovRdx(nint arg)
+    {
+        asm.AddRange(stackalloc byte[] { 0x48, 0xBA });
+        asm.AddRange(MemoryMarshal.AsBytes([arg]));
+    }
+
+    public void CallEax() => asm.AddRange(stackalloc byte[] { 0xFF, 0xD0 });
+    public void MovEax(nint arg)
+    {
+        asm.Add(0xB8);
+        asm.AddRange(MemoryMarshal.AsBytes([(int)arg]));
+    }
+    public void MovEaxTo(nint dest)
+    {
+        asm.Add(0xA3);
+        asm.AddRange(MemoryMarshal.AsBytes([(int)dest]));
+    }
+    public void MovR8(nint arg)
+    {
+        asm.AddRange(stackalloc byte[] { 0x49, 0xB8 });
+        asm.AddRange(MemoryMarshal.AsBytes([arg]));
+    }
+    public void MovR9(nint arg)
+    {
+        asm.AddRange(stackalloc byte[] { 0x49, 0xB9 });
+        asm.AddRange(MemoryMarshal.AsBytes([arg]));
+    }
+
+    public void SubRsp(byte arg) => asm.AddRange(stackalloc byte[] { 0x48, 0x83, 0xEC, arg });
+    public void AddRsp(byte arg) => asm.AddRange(stackalloc byte[] { 0x48, 0x83, 0xC4, arg });
+    public void AddEsp(byte arg) => asm.AddRange(stackalloc byte[] { 0x83, 0xC4, arg });
+
     public void Push(nint arg)
     {
         var intArg = (int)arg;
         asm.Add(intArg < 128 ? (byte)0x6A : (byte)0x68);
 
-        if (intArg > 255) asm.AddRange(BitConverter.GetBytes(intArg));
+        if (intArg > 255) asm.AddRange(MemoryMarshal.AsBytes([intArg]));
         else asm.Add((byte)arg);
-    }
-    public void MovEax(nint arg)
-    {
-        asm.Add(0xB8);
-        asm.AddRange(BitConverter.GetBytes((int)arg));
-    }
-    public void CallEax() => asm.AddRange([0xFF, 0xD0]);
-
-    public void AddEsp(byte arg) => asm.AddRange([0x83, 0xC4, arg]);
-    public void MovEaxTo(nint dest)
-    {
-        asm.Add(0xA3);
-        asm.AddRange(BitConverter.GetBytes((int)dest));
     }
     public void Return() => asm.Add(0xC3);
 
     public ReadOnlySpan<byte> Compile() => CollectionsMarshal.AsSpan(asm);
 }
-
 
 /* 
 using System.Runtime.CompilerServices;
