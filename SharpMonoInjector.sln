@@ -8,7 +8,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpMonoInjector.Gui", "Sh
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpMonoInjector", "SharpMonoInjector\SharpMonoInjector.csproj", "{929D5F1D-EE93-4AA2-900C-D9689CBC4DE1}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ExampleAssembly", "ExampleAssembly\ExampleAssembly.csproj", "{251A7FF8-4D39-4F8B-9838-61124BF62F99}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LCHack", "LCHack\LCHack.csproj", "{3F58A934-A3F3-439E-84EE-1FAE6101EC19}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -28,10 +28,10 @@ Global
 		{929D5F1D-EE93-4AA2-900C-D9689CBC4DE1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{929D5F1D-EE93-4AA2-900C-D9689CBC4DE1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{929D5F1D-EE93-4AA2-900C-D9689CBC4DE1}.Release|Any CPU.Build.0 = Release|Any CPU
-		{251A7FF8-4D39-4F8B-9838-61124BF62F99}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{251A7FF8-4D39-4F8B-9838-61124BF62F99}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{251A7FF8-4D39-4F8B-9838-61124BF62F99}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{251A7FF8-4D39-4F8B-9838-61124BF62F99}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3F58A934-A3F3-439E-84EE-1FAE6101EC19}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3F58A934-A3F3-439E-84EE-1FAE6101EC19}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3F58A934-A3F3-439E-84EE-1FAE6101EC19}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3F58A934-A3F3-439E-84EE-1FAE6101EC19}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

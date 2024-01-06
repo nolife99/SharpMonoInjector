@@ -43,7 +43,7 @@ public sealed class ProcessMemory(ProcessHandle handle) : IDisposable
         return addr;
     }
     public nint AllocateAndWrite(ReadOnlySpan<char> data) => AllocateAndWrite(Encoding.ASCII.GetBytes(data.ToArray()));
-    public nint AllocateAndWrite<T>(T data) where T : unmanaged => AllocateAndWrite(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, byte>(ref data), Marshal.SizeOf<T>()));
+    public unsafe nint AllocateAndWrite<T>(T data) where T : unmanaged => AllocateAndWrite(new ReadOnlySpan<byte>(&data, Marshal.SizeOf<T>()));
 
     public nint Allocate(int size)
     {
@@ -68,7 +68,7 @@ public sealed class ProcessMemory(ProcessHandle handle) : IDisposable
 
     void Dispose(bool disposing)
     {
-        allocs.AsParallel().ForAll(kvp => VirtualFreeEx(handle.DangerousGetHandle(), kvp.Item1, kvp.Item2, 0x4000));
+        allocs.AsParallel().ForAll(kvp => VirtualFreeEx(handle.DangerousGetHandle(), kvp.Item1, kvp.Item2, 0x00008000));
         if (disposing) allocs.Clear();
     }
 

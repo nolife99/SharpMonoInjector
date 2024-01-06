@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace SharpMonoInjector;
@@ -9,157 +10,66 @@ public readonly ref struct Assembler
     readonly List<byte> asm;
     public Assembler() => asm = [];
 
-    public void CallRax() => asm.AddRange(stackalloc byte[] { 0xFF, 0xD0 });
+    public void CallRax() => asm.AddRange([0xFF, 0xD0]);
     public void MovRax(nint arg)
     {
-        asm.AddRange(stackalloc byte[] { 0x48, 0xB8 });
-        asm.AddRange(MemoryMarshal.AsBytes([arg]));
+        asm.AddRange([0x48, 0xB8]);
+        AddArgAsBytes(ref arg);
     }
-    public void MovRaxTo(nint dest)
+    public void MovRaxTo(nint arg)
     {
         asm.AddRange([0x48, 0xA3]);
-        asm.AddRange(BitConverter.GetBytes(dest));
+        AddArgAsBytes(ref arg);
     }
     public void MovRcx(nint arg)
     {
-        asm.AddRange(stackalloc byte[] { 0x48, 0xB9 });
-        asm.AddRange(MemoryMarshal.AsBytes([arg]));
+        asm.AddRange([0x48, 0xB9]);
+        AddArgAsBytes(ref arg);
     }
     public void MovRdx(nint arg)
     {
-        asm.AddRange(stackalloc byte[] { 0x48, 0xBA });
-        asm.AddRange(MemoryMarshal.AsBytes([arg]));
+        asm.AddRange([0x48, 0xBA]);
+        AddArgAsBytes(ref arg);
     }
 
-    public void CallEax() => asm.AddRange(stackalloc byte[] { 0xFF, 0xD0 });
+    public void CallEax() => asm.AddRange([0xFF, 0xD0]);
     public void MovEax(nint arg)
     {
         asm.Add(0xB8);
-        asm.AddRange(MemoryMarshal.AsBytes([(int)arg]));
+        AddArgAsBytes(ref Unsafe.As<nint, int>(ref arg));
     }
-    public void MovEaxTo(nint dest)
+    public void MovEaxTo(nint arg)
     {
         asm.Add(0xA3);
-        asm.AddRange(MemoryMarshal.AsBytes([(int)dest]));
+        AddArgAsBytes(ref arg);
     }
     public void MovR8(nint arg)
     {
-        asm.AddRange(stackalloc byte[] { 0x49, 0xB8 });
-        asm.AddRange(MemoryMarshal.AsBytes([arg]));
+        asm.AddRange([0x49, 0xB8]);
+        AddArgAsBytes(ref arg);
     }
     public void MovR9(nint arg)
     {
-        asm.AddRange(stackalloc byte[] { 0x49, 0xB9 });
-        asm.AddRange(MemoryMarshal.AsBytes([arg]));
+        asm.AddRange([0x49, 0xB9]);
+        AddArgAsBytes(ref arg);
     }
 
-    public void SubRsp(byte arg) => asm.AddRange(stackalloc byte[] { 0x48, 0x83, 0xEC, arg });
-    public void AddRsp(byte arg) => asm.AddRange(stackalloc byte[] { 0x48, 0x83, 0xC4, arg });
-    public void AddEsp(byte arg) => asm.AddRange(stackalloc byte[] { 0x83, 0xC4, arg });
+    public void SubRsp(byte arg) => asm.AddRange([0x48, 0x83, 0xEC, arg]);
+    public void AddRsp(byte arg) => asm.AddRange([0x48, 0x83, 0xC4, arg]);
+    public void AddEsp(byte arg) => asm.AddRange([0x83, 0xC4, arg]);
 
     public void Push(nint arg)
     {
-        var intArg = (int)arg;
+        ref var intArg = ref Unsafe.As<nint, int>(ref arg);
         asm.Add(intArg < 128 ? (byte)0x6A : (byte)0x68);
 
-        if (intArg > 255) asm.AddRange(MemoryMarshal.AsBytes([intArg]));
-        else asm.Add((byte)arg);
+        if (intArg > 255) AddArgAsBytes(ref intArg);
+        else asm.Add(Unsafe.As<nint, byte>(ref arg));
     }
+
     public void Return() => asm.Add(0xC3);
-
     public ReadOnlySpan<byte> Compile() => CollectionsMarshal.AsSpan(asm);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    void AddArgAsBytes<T>(ref T arg) => asm.AddRange(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, byte>(ref arg), Unsafe.SizeOf<T>()));
 }
-
-/* 
-using System.Runtime.CompilerServices;
-using System.Collections;
-
-unsafe class PrimitiveCollection<T> : ICollection<T> where T : unmanaged, IEquatable<T>
-{
-    void* buf;
-    int count, capacity;
-    readonly uint elementSize;
-
-    public int Count => count;
-    public bool IsReadOnly => false;
-
-    public PrimitiveCollection() => buf = NativeMemory.Alloc((uint)(capacity = 16) * (elementSize = (uint)sizeof(T)));
-    ~PrimitiveCollection() => NativeMemory.Free(buf);
-
-    public void CopyTo(T[] arr, int index)
-    {
-        var realLen = Math.Min(count, arr.Length - index);
-        new ReadOnlySpan<T>(buf, realLen).CopyTo(new(arr, index, realLen));
-    }
-    public ReadOnlySpan<T> AsSpan() => new(buf, count);
-
-    public void Clear()
-    {
-        buf = NativeMemory.Realloc(buf, 0);
-        count = 0;
-        capacity = 0;
-    }
-
-    public void Add(T item)
-    {
-        if (count == capacity) EnsureCapacity(count + 1);
-        Unsafe.WriteUnaligned(Unsafe.Add<T>(buf, count++), item);
-    }
-    public void AddRange(ReadOnlySpan<T> values)
-    {
-        var len = values.Length;
-        var total = count + len;
-        if (total > capacity) EnsureCapacity(total);
-
-        values.CopyTo(new(Unsafe.Add<T>(buf, count), len));
-        count = total;
-    }
-    public bool Remove(T item)
-    {
-        try
-        {
-            RemoveAt(IndexOf(item));
-        }
-        catch (IndexOutOfRangeException)
-        {
-            return false;
-        }
-        return true;
-    }
-    public void RemoveAt(int index)
-    {
-        if ((uint)index >= (uint)count) throw new IndexOutOfRangeException($"Index: {index} | Count: {count}");
-        --count;
-        if (index < count) NativeMemory.Copy(Unsafe.Add<T>(buf, index + 1), Unsafe.Add<T>(buf, index), (uint)(count - index) * elementSize);
-    }
-
-    public bool Contains(T item) => AsSpan().Contains(item);
-    public int IndexOf(T item) => AsSpan().IndexOf(item);
-
-    void EnsureCapacity(int minimum) => buf = NativeMemory.Realloc(buf, (uint)Math.Max(capacity += capacity / 2, minimum) * elementSize);
-
-    public IEnumerator<T> GetEnumerator() => new Enumerator(this);
-    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-
-    struct Enumerator(PrimitiveCollection<T> data) : IEnumerator<T>, IEnumerator
-    {
-        int _index = -1;
-
-        bool IEnumerator.MoveNext()
-        {
-            var index = _index + 1;
-            if (index < data.Count)
-            {
-                _index = index;
-                return true;
-            }
-            return false;
-        }
-
-        void IEnumerator.Reset() => _index = -1;
-        void IDisposable.Dispose() => _index = int.MaxValue;
-
-        readonly T IEnumerator<T>.Current => Unsafe.ReadUnaligned<T>(Unsafe.Add<T>(data.buf, _index < data.Count ? _index : data.Count));
-        readonly object IEnumerator.Current => Unsafe.ReadUnaligned<T>(Unsafe.Add<T>(data.buf, _index < data.Count ? _index : data.Count));
-    }
-} */
