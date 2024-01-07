@@ -9,7 +9,7 @@ using System.IO;
 
 namespace LCHack;
 
-internal class Logger
+internal sealed class Logger
 {
     internal static void Log(string message) => File.AppendAllText("hackErr.log", message + Environment.NewLine);
 }

@@ -12,15 +12,8 @@ using Microsoft.Win32;
 namespace SharpMonoInjector;
 
 public static class ProcessUtils
-{ 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    static extern bool IsWow64Process2(nint hProcess, out ushort processMachine, out ushort nativeMachine);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    static extern bool IsWow64Process(nint hProcess, out bool wow64Process);
-    static bool isTargetx64;
-
-    public static IEnumerable<ExportedFunction> GetExportedFunctions(ProcessHandle proc, nint mod)
+{
+    public static IEnumerable<ExportedFunction> GetExportedFunctions(Process proc, nint mod)
     {
         using ProcessMemory memory = new(proc);
 
@@ -35,16 +28,15 @@ public static class ProcessUtils
             if (addr != 0) yield return new(memory.ReadString(mod + memory.Read<int>(names + i * 4), 32, Encoding.ASCII), addr);
         }
     }
-    public unsafe static bool GetMonoModule(ProcessHandle proc, out nint monoModule)
+    public unsafe static bool GetMonoModule(Process process, out nint monoModule)
     {
-        var handle = proc.DangerousGetHandle();
-        if (!Native.EnumProcessModulesEx(handle, 0, 0, out var bytesNeeded))
+        if (!Native.EnumProcessModulesEx(process.SafeHandle, 0, 0, out var bytesNeeded))
             throw new InjectorException("Failed to get process module count", new Win32Exception(Marshal.GetLastWin32Error()));
 
-        var count = bytesNeeded / (Is64BitProcess(proc) ? 8 : 4);
+        var count = bytesNeeded / (Is64BitProcess(process) ? 8 : 4);
         var ptrs = stackalloc nint[count];
 
-        if (!Native.EnumProcessModulesEx(handle, (nint)ptrs, bytesNeeded, out _))
+        if (!Native.EnumProcessModulesEx(process.SafeHandle, (nint)ptrs, bytesNeeded, out _))
             throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
 
         const int MAX_PATH = 260;
@@ -52,12 +44,12 @@ public static class ProcessUtils
 
         for (var i = 0; i < count; ++i) try
         {
-            if (new string(path, 0, Native.GetModuleFileNameExA(handle, ptrs[i], (nint)path, MAX_PATH)).Contains("mono", StringComparison.OrdinalIgnoreCase))
+            if (new string(path, 0, Native.GetModuleFileNameExA(process.SafeHandle, ptrs[i], (nint)path, MAX_PATH)).Contains("mono", StringComparison.OrdinalIgnoreCase))
             {
-                if (!Native.GetModuleInformation(handle, ptrs[i], out var info, bytesNeeded))
+                if (!Native.GetModuleInformation(process.SafeHandle, ptrs[i], out var info, bytesNeeded))
                     throw new InjectorException("Failed to get module information", new Win32Exception(Marshal.GetLastWin32Error()));
 
-                if (GetExportedFunctions(proc, info).Any(f => f.Name == "mono_get_root_domain"))
+                if (GetExportedFunctions(process, info).Any(f => f.Name == "mono_get_root_domain"))
                 {
                     monoModule = info;
                     return true;
@@ -72,36 +64,28 @@ public static class ProcessUtils
         monoModule = 0;
         return false;
     }
-    public static bool Is64BitProcess(ProcessHandle proc)
+
+    static bool isTargetx64;
+    public static bool Is64BitProcess(Process proc)
     {
         try
         {
             if (!Environment.Is64BitOperatingSystem) return false;
 
             var OSVer = (string)Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion", "ProductName", null);
-            Console.WriteLine(OSVer);
-
             if (OSVer.Contains("Windows 10"))
             {
-                #region Win10
-        
-                isTargetx64 = false;
-                if (!proc.IsInvalid)
-                {
-                    IsWow64Process2(proc.DangerousGetHandle(), out var pMachine, out _);
+                Native.IsWow64Process2(proc.SafeHandle, out var pMachine, out _);
 
-                    if (pMachine == 332) isTargetx64 = false;
-                    else isTargetx64 = true;
+                if (pMachine == 332) isTargetx64 = false;
+                else isTargetx64 = true;
 
-                    return isTargetx64;
-                }
-        
-                #endregion
+                return isTargetx64;
             }
 
             #region Win7
 
-            IsWow64Process(proc.DangerousGetHandle(), out bool isTargetWOWx64);
+            Native.IsWow64Process(proc.SafeHandle, out bool isTargetWOWx64);
             return !isTargetWOWx64;
 
             #endregion  

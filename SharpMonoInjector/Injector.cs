@@ -40,7 +40,7 @@ public sealed class Injector : IDisposable
     };
 
     readonly ProcessMemory memory;
-    readonly ProcessHandle handle;
+    readonly Process process;
     readonly nint mono;
 
     bool attach;
@@ -48,36 +48,33 @@ public sealed class Injector : IDisposable
 
     public bool Is64Bit { get; private set; }
 
-    public Injector(ReadOnlySpan<char> processName)
+    public Injector(ReadOnlySpan<char> processName) 
     {
         processName = processName[..processName.IndexOf(".exe")];
-        using var process = Process.GetProcessesByName(processName.ToString()).FirstOrDefault() ?? throw new InjectorException($"Couldn't find process with name '{processName}'");
+        Is64Bit = ProcessUtils.Is64BitProcess(process = Process.GetProcessesByName(processName.ToString()).FirstOrDefault() ?? throw new InjectorException($"Couldn't find process with name '{processName}'"));
+        if (!ProcessUtils.GetMonoModule(process, out mono)) throw new InjectorException("Error while finding mono in target process");
 
-        if ((handle = new(process.Id)).IsInvalid) throw new InjectorException($"Failed to open process with ID {process.Id}", new Win32Exception(Marshal.GetLastWin32Error()));
-        Is64Bit = ProcessUtils.Is64BitProcess(handle);
-        if (!ProcessUtils.GetMonoModule(handle, out mono)) throw new InjectorException("Failed to find mono.dll in target process");
-
-        memory = new(handle);
+        memory = new(process);
     }
     public Injector(int processId)
     {
-        if ((handle = new(processId)).IsInvalid) throw new InjectorException($"Failed to open process with ID {processId}", new Win32Exception(Marshal.GetLastWin32Error()));
-        Is64Bit = ProcessUtils.Is64BitProcess(handle);
-        if (!ProcessUtils.GetMonoModule(handle, out mono)) throw new InjectorException("Failed to find mono.dll in target process");
-
-        memory = new(handle);
+        Is64Bit = ProcessUtils.Is64BitProcess(process = Process.GetProcessById(processId));
+        if (!ProcessUtils.GetMonoModule(process, out mono)) throw new InjectorException("Error while finding mono in target process");
+        memory = new(process);
     }
-    public Injector(ProcessHandle processHandle, nint monoModule)
+    public Injector(Process proc, nint monoModule)
     {
+        process = proc;
         mono = monoModule;
-        Is64Bit = ProcessUtils.Is64BitProcess(handle = processHandle);
-        memory = new(handle);
+
+        Is64Bit = ProcessUtils.Is64BitProcess(proc);
+        memory = new(proc);
     }
 
     public void Dispose()
     {
         memory.Dispose();
-        handle.Dispose();
+        process.Dispose();
         exports.Clear();
 
         GC.SuppressFinalize(this);
@@ -85,7 +82,7 @@ public sealed class Injector : IDisposable
 
     void ObtainMonoExports()
     {
-        ProcessUtils.GetExportedFunctions(handle, mono).AsParallel().ForAll(ef =>
+        ProcessUtils.GetExportedFunctions(process, mono).AsParallel().ForAll(ef =>
         {
             if (exports.ContainsKey(ef.Name)) exports[ef.Name] = ef.Address;
         });
@@ -199,7 +196,7 @@ public sealed class Injector : IDisposable
     {
         var retValPtr = Is64Bit ? memory.Allocate(8) : memory.Allocate(4);
 
-        var thread = Native.CreateRemoteThread(handle.DangerousGetHandle(), 0, 0, memory.AllocateAndWrite(Assemble(addr, retValPtr, args)), 0, 0, out _);
+        var thread = Native.CreateRemoteThread(process.SafeHandle, 0, 0, memory.AllocateAndWrite(Assemble(addr, retValPtr, args)), 0, 0, out _);
         if (thread == 0) throw new InjectorException("Failed to create remote thread", new Win32Exception(Marshal.GetLastWin32Error()));
 
         if (Native.WaitForSingleObject(thread, -1) == 0xFFFFFFFF) throw new InjectorException("Failed to wait for remote thread", new Win32Exception(Marshal.GetLastWin32Error()));

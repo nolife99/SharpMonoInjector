@@ -1,35 +1,60 @@
 ﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace SharpMonoInjector;
 
 public static class Native
 {
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport("kernel32", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static extern bool CloseHandle(nint handle);
 
-    [DllImport("advapi32.dll", SetLastError = true)]
+    [DllImport("advapi32", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern bool OpenProcessToken(nint ProcessHandle, int DesiredAccess, out nint TokenHandle);
+    public static extern bool OpenProcessToken(SafeProcessHandle ProcessHandle, int DesiredAccess, out SafeAccessTokenHandle TokenHandle);
 
-    [DllImport("psapi.dll", SetLastError = true)]
+    [DllImport("psapi", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern bool EnumProcessModulesEx(nint hProcess, nint lphModule, int cb, out int lpcbNeeded, int dwFilterFlag = 0x03);
+    internal static extern bool EnumProcessModulesEx(SafeProcessHandle hProcess, nint lphModule, int cb, out int lpcbNeeded, int dwFilterFlag = 0x03);
 
-    [DllImport("psapi.dll")]
+    [DllImport("psapi")]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern int GetModuleFileNameExA(nint hProcess, nint hModule, nint lpBaseName, int nSize);
+    internal static extern int GetModuleFileNameExA(SafeProcessHandle hProcess, nint hModule, nint lpBaseName, int nSize);
 
-    [DllImport("psapi.dll", SetLastError = true)]
+    [DllImport("psapi", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern bool GetModuleInformation(nint hProcess, nint hModule, out nint lpmodinfo, int cb);
+    internal static extern bool GetModuleInformation(SafeProcessHandle hProcess, nint hModule, out nint lpmodinfo, int cb);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport("kernel32", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern nint CreateRemoteThread(nint hProcess, nint lpThreadAttributes, int dwStackSize, nint lpStartAddress, nint lpParameter, int dwCreationFlags, out int lpThreadId);
+    internal static extern nint CreateRemoteThread(SafeProcessHandle hProcess, nint lpThreadAttributes, int dwStackSize, nint lpStartAddress, nint lpParameter, int dwCreationFlags, out int lpThreadId);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
+    [DllImport("kernel32", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern uint WaitForSingleObject(nint hHandle, int dwMilliseconds);
+    internal static extern uint WaitForSingleObject(nint hHandle, int dwMilliseconds);
+
+    [DllImport("kernel32", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static extern bool IsWow64Process2(SafeProcessHandle hProcess, out ushort processMachine, out ushort nativeMachine);
+
+    [DllImport("kernel32", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static extern bool IsWow64Process(SafeProcessHandle hProcess, out bool wow64Process);
+
+    [DllImport("kernel32", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static extern bool ReadProcessMemory(SafeProcessHandle hProcess, nint lpBaseAddress, nint lpBuffer, int nSize, int lpNumberOfBytesWritten = 0);
+
+    [DllImport("kernel32", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static extern bool WriteProcessMemory(SafeProcessHandle hProcess, nint lpBaseAddress, nint lpBuffer, int nSize, int lpNumberOfBytesRead = 0);
+
+    [DllImport("kernel32", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static extern nint VirtualAllocEx(SafeProcessHandle hProcess, nint lpAddress, int dwSize, int flAllocationType, int flProtect);
+
+    [DllImport("kernel32", SetLastError = true)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static extern bool VirtualFreeEx(SafeProcessHandle hProcess, nint lpAddress, int dwSize, int dwFreeType);
 }

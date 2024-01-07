@@ -10,29 +10,29 @@ public readonly ref struct Assembler
     readonly List<byte> asm;
     public Assembler() => asm = [];
 
-    public void CallRax() => asm.AddRange([0xFF, 0xD0]);
+    public void CallRax() => AddStack([0xFF, 0xD0]);
     public void MovRax(nint arg)
     {
-        asm.AddRange([0x48, 0xB8]);
+        AddStack([0x48, 0xB8]);
         AddArgAsBytes(ref arg);
     }
     public void MovRaxTo(nint arg)
     {
-        asm.AddRange([0x48, 0xA3]);
+        AddStack([0x48, 0xA3]);
         AddArgAsBytes(ref arg);
     }
     public void MovRcx(nint arg)
     {
-        asm.AddRange([0x48, 0xB9]);
+        AddStack([0x48, 0xB9]);
         AddArgAsBytes(ref arg);
     }
     public void MovRdx(nint arg)
     {
-        asm.AddRange([0x48, 0xBA]);
+        AddStack([0x48, 0xBA]);
         AddArgAsBytes(ref arg);
     }
 
-    public void CallEax() => asm.AddRange([0xFF, 0xD0]);
+    public void CallEax() => AddStack([0xFF, 0xD0]);
     public void MovEax(nint arg)
     {
         asm.Add(0xB8);
@@ -45,18 +45,18 @@ public readonly ref struct Assembler
     }
     public void MovR8(nint arg)
     {
-        asm.AddRange([0x49, 0xB8]);
+        AddStack([0x49, 0xB8]);
         AddArgAsBytes(ref arg);
     }
     public void MovR9(nint arg)
     {
-        asm.AddRange([0x49, 0xB9]);
+        AddStack([0x49, 0xB9]);
         AddArgAsBytes(ref arg);
     }
 
-    public void SubRsp(byte arg) => asm.AddRange([0x48, 0x83, 0xEC, arg]);
-    public void AddRsp(byte arg) => asm.AddRange([0x48, 0x83, 0xC4, arg]);
-    public void AddEsp(byte arg) => asm.AddRange([0x83, 0xC4, arg]);
+    public void SubRsp(byte arg) => AddStack([0x48, 0x83, 0xEC, arg]);
+    public void AddRsp(byte arg) => AddStack([0x48, 0x83, 0xC4, arg]);
+    public void AddEsp(byte arg) => AddStack([0x83, 0xC4, arg]);
 
     public void Push(nint arg)
     {
@@ -71,5 +71,8 @@ public readonly ref struct Assembler
     public ReadOnlySpan<byte> Compile() => CollectionsMarshal.AsSpan(asm);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void AddArgAsBytes<T>(ref T arg) => asm.AddRange(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, byte>(ref arg), Unsafe.SizeOf<T>()));
+    void AddArgAsBytes<T>(ref T arg) => AddStack(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, byte>(ref arg), Unsafe.SizeOf<T>()));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    void AddStack(ReadOnlySpan<byte> arg) => asm.AddRange(arg);
 }

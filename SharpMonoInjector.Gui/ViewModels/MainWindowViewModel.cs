@@ -2,7 +2,6 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows;
@@ -26,16 +25,14 @@ public partial class MainWindowViewModel : ViewModel
             Processes = [];
             Trace.WriteLine("[MainWindowViewModel] - Checking Processes for Mono");
 
-            var cp = Environment.ProcessId;
             await Parallel.ForEachAsync(Process.GetProcesses(), (p, t) => 
             {
                 using (p) try
                 {
-                    using ProcessHandle handle = new(p.Id, ProcessAccess.QueryInfo | ProcessAccess.ReadVM);
-                    if (!handle.IsInvalid && !GetProcessUser(handle, p.ProcessName).IsEmpty && p.Id != cp)
+                    if (!GetProcessUser(p).IsEmpty && p.Id != Environment.ProcessId)
                     {
                         Trace.WriteLine("\t" + p.ProcessName + ".exe");
-                        if (ProcessUtils.GetMonoModule(handle, out var mono))
+                        if (ProcessUtils.GetMonoModule(p, out var mono))
                         {
                             Trace.WriteLine("\t\tMono found in process: " + p.ProcessName + ".exe");
                             Processes = processes.Add(new()
@@ -79,13 +76,6 @@ public partial class MainWindowViewModel : ViewModel
 
         InjectCommand = new(async () =>
         {
-            using ProcessHandle handle = new(selectedProcess.Id);
-            if (handle.IsInvalid)
-            {
-                Status = "Failed to open process";
-                return;
-            }
-
             var filename = Path.GetFileName(assemblyPath);
             byte[] file;
 
@@ -103,11 +93,12 @@ public partial class MainWindowViewModel : ViewModel
             IsExecuting = true;
             Status = "Injecting " + filename;
 
-            using (Injector injector = new(handle, selectedProcess.MonoModule))
+            try
             {
-                try
+                using Injector injector = new(Process.GetProcessById(selectedProcess.Id), selectedProcess.MonoModule);
+                await Task.Run(() =>
                 {
-                    var asm = await Task.Run(() => injector.Inject(file, injectNamespace, injectClassName, injectMethodName));
+                    var asm = injector.Inject(file, injectNamespace, injectClassName, injectMethodName);
                     InjectedAssemblies = injectedAssemblies.Add(new()
                     {
                         ProcessId = selectedProcess.Id,
@@ -115,49 +106,42 @@ public partial class MainWindowViewModel : ViewModel
                         Name = filename,
                         Is64Bit = injector.Is64Bit
                     });
-                    Status = "Injected " + filename;
-                }
-                catch (InjectorException e)
-                {
-                    Status = "Injection failed: " + e.Message;
-                }
-                catch (Exception e)
-                {
-                    Status = "Injection failed (unknown error): " + e.Message;
-                }
+                });
+                Status = "Injected " + filename;
+            }
+            catch (InjectorException e)
+            {
+                Status = "Injection failed: " + e.Message;
+            }
+            catch (Exception e)
+            {
+                Status = "Injection failed (unknown error): " + e.Message;
             }
             IsExecuting = false;
         }, () => selectedProcess.Id != 0 && File.Exists(assemblyPath) && !string.IsNullOrWhiteSpace(injectClassName) && !string.IsNullOrWhiteSpace(injectMethodName) && !IsExecuting);
 
-        EjectCommand = new(() =>
+        EjectCommand = new(async () =>
         {
-            using ProcessHandle handle = new(selectedAssembly.ProcessId);
-            if (handle.IsInvalid)
-            {
-                Status = "Failed to open process";
-                return;
-            }
-
             IsExecuting = true;
             Status = "Ejecting " + selectedAssembly.Name;
 
-            ProcessUtils.GetMonoModule(handle, out var mono);
-            using (Injector injector = new(handle, mono))
+            try
             {
-                try
+                using Injector injector = new(selectedAssembly.ProcessId);
+                await Task.Run(() =>
                 {
                     injector.Eject(selectedAssembly.Address, ejectNamespace, ejectClassName, ejectMethodName);
                     InjectedAssemblies = injectedAssemblies.Remove(selectedAssembly);
-                    Status = "Ejected " + selectedAssembly.Name;
-                }
-                catch (InjectorException ie)
-                {
-                    Status = "Ejection failed: " + ie.Message;
-                }
-                catch (Exception e)
-                {
-                    Status = "Ejection failed (unknown error): " + e.Message;
-                }
+                });
+                Status = "Ejected " + selectedAssembly.Name;
+            }
+            catch (InjectorException ie)
+            {
+                Status = "Ejection failed: " + ie.Message;
+            }
+            catch (Exception e)
+            {
+                Status = "Ejection failed (unknown error): " + e.Message;
             }
             IsExecuting = false;
         }, () => selectedAssembly.ProcessId != 0 && !string.IsNullOrWhiteSpace(ejectClassName) && !string.IsNullOrWhiteSpace(ejectMethodName) && !IsExecuting);
@@ -327,25 +311,22 @@ public partial class MainWindowViewModel : ViewModel
         }
     }
 
-    static ReadOnlySpan<char> GetProcessUser(ProcessHandle process, ReadOnlySpan<char> procName)
+    static ReadOnlySpan<char> GetProcessUser(Process process)
     {
-        Unsafe.SkipInit(out nint token);
         try
         {
-            Native.OpenProcessToken(process.DangerousGetHandle(), 8, out token);
-            using WindowsIdentity id = new(token);
-
-            var user = id.Name.AsSpan();
-            return user.Contains('\\') ? user[(user.IndexOf('\\') + 1)..] : user;
+            Native.OpenProcessToken(process.SafeHandle, 8, out var token);
+            using (token)
+            {
+                using WindowsIdentity id = new(token.DangerousGetHandle());
+                var user = id.Name.AsSpan();
+                return user.Contains('\\') ? user[(user.IndexOf('\\') + 1)..] : user;
+            }
         }
         catch (Exception e)
         {
-            Trace.WriteLine(string.Concat("\tError Getting User Process: ", procName, " - ", e.Message));
+            Trace.WriteLine(string.Concat("\tError getting user process: ", process.ProcessName, " - ", e.Message));
             return [];
-        }
-        finally
-        {
-            if (token != 0) Native.CloseHandle(token);
         }
     }
 }
