@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Windows;
 
 namespace SharpMonoInjector.Gui;
@@ -10,16 +11,13 @@ public partial class App : Application
 {
     public App()
     {
-        StreamWriter output = new(Path.Combine(Environment.CurrentDirectory, "trace.log"), false, Encoding.ASCII);
-        TextWriterTraceListener listener = new(output);
-
-        Trace.Listeners.Add(listener);
-        Trace.AutoFlush = true;
+        Trace.Listeners.Add(new TextWriterTraceListener(new StreamWriter(Path.Combine(Environment.CurrentDirectory, "trace.log"), false, Encoding.ASCII)));
+        Timer timer = new(_ => Trace.Flush(), null, 0, 5000);
 
         Exit += (_, _) =>
         {
-            listener.Dispose();
-            output.Dispose();
+            timer.Dispose();
+            Trace.Close();
         };
     }
 }

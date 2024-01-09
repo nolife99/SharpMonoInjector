@@ -1,11 +1,9 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Management;
-using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
 
@@ -13,7 +11,7 @@ namespace SharpMonoInjector;
 
 public static class ProcessUtils
 {
-    public static IEnumerable<ExportedFunction> GetExportedFunctions(Process proc, nint mod)
+    internal static IEnumerable<ExportedFunction> GetExportedFunctions(Process proc, nint mod)
     {
         using ProcessMemory memory = new(proc);
 
@@ -31,13 +29,13 @@ public static class ProcessUtils
     public unsafe static bool GetMonoModule(Process process, out nint monoModule)
     {
         if (!Native.EnumProcessModulesEx(process.SafeHandle, 0, 0, out var bytesNeeded))
-            throw new InjectorException("Failed to get process module count", new Win32Exception(Marshal.GetLastWin32Error()));
+            throw new InjectorException("Failed to get process module count", new Win32Exception());
 
         var count = bytesNeeded / (Is64BitProcess(process) ? 8 : 4);
         var ptrs = stackalloc nint[count];
 
         if (!Native.EnumProcessModulesEx(process.SafeHandle, (nint)ptrs, bytesNeeded, out _))
-            throw new InjectorException("Failed to enumerate process modules", new Win32Exception(Marshal.GetLastWin32Error()));
+            throw new InjectorException("Failed to enumerate process modules", new Win32Exception());
 
         const int MAX_PATH = 260;
         var path = stackalloc sbyte[MAX_PATH];
@@ -46,14 +44,10 @@ public static class ProcessUtils
         {
             if (new string(path, 0, Native.GetModuleFileNameExA(process.SafeHandle, ptrs[i], (nint)path, MAX_PATH)).Contains("mono", StringComparison.OrdinalIgnoreCase))
             {
-                if (!Native.GetModuleInformation(process.SafeHandle, ptrs[i], out var info, bytesNeeded))
-                    throw new InjectorException("Failed to get module information", new Win32Exception(Marshal.GetLastWin32Error()));
+                if (!Native.GetModuleInformation(process.SafeHandle, ptrs[i], out var info, bytesNeeded)) throw new InjectorException("Failed to get module information", new Win32Exception());
 
-                if (GetExportedFunctions(process, info).Any(f => f.Name == "mono_get_root_domain"))
-                {
-                    monoModule = info;
-                    return true;
-                }
+                monoModule = info;
+                return true;
             }
         }
         catch (Exception e)
@@ -65,8 +59,8 @@ public static class ProcessUtils
         return false;
     }
 
-    static bool isTargetx64;
-    public static bool Is64BitProcess(Process proc)
+    static bool is64;
+    internal static bool Is64BitProcess(Process proc)
     {
         try
         {
@@ -77,16 +71,16 @@ public static class ProcessUtils
             {
                 Native.IsWow64Process2(proc.SafeHandle, out var pMachine, out _);
 
-                if (pMachine == 332) isTargetx64 = false;
-                else isTargetx64 = true;
+                if (pMachine == 332) is64 = false;
+                else is64 = true;
 
-                return isTargetx64;
+                return is64;
             }
 
             #region Win7
 
-            Native.IsWow64Process(proc.SafeHandle, out bool isTargetWOWx64);
-            return !isTargetWOWx64;
+            Native.IsWow64Process(proc.SafeHandle, out bool isWOW64);
+            return !isWOW64;
 
             #endregion  
         }
@@ -100,7 +94,7 @@ public static class ProcessUtils
     {
         try
         {
-            ConcurrentBag<string> avs = [];
+            List<string> avs = [];
             using ManagementObjectSearcher searcher = new(@"\\" + Environment.MachineName + @"\root\SecurityCenter2", "SELECT * FROM AntivirusProduct");
             using var instances = searcher.Get();
 
@@ -114,8 +108,8 @@ public static class ProcessUtils
                     using (av)
                     {
                         var avInstalled = ((string)av.GetPropertyValue("pathToSignedProductExe")).Replace("//", "") + " " + (string)av.GetPropertyValue("pathToSignedReportingExe");
-                        installedAVs.AppendLine("   " + avInstalled);
                         avs.Add(avInstalled.ToLower());
+                        lock (installedAVs) installedAVs.AppendLine("   " + avInstalled);
                     }
                 });
                 Trace.WriteLine(installedAVs.ToString());
@@ -133,7 +127,7 @@ public static class ProcessUtils
         }
         catch (Exception e)
         {
-            Trace.WriteLine("Error checking for Antivirus: " + e.Message);
+            Trace.WriteLine("Error checking for Antivirus: " + e.ToString());
         }
         return false;
     }

@@ -3,52 +3,36 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using GameNetcodeStuff;
 using HarmonyLib;
 using UnityEngine;
+
+using Object = UnityEngine.Object;
 
 namespace LCHack;
 
 internal sealed class Hacks : MonoBehaviour
 {
-    bool cursorIsLocked = true, insertKeyWasPressed, isMenuOpen, esp = true, itemEsp = true, enemyEsp = true, addMoney;
-    internal bool godMode, farScan = true, infCharge = true, infSprint = true, highItemVal, clock = true;
-    static int windowId;
+    static PlayerControllerB server;
+    static bool cursorIsLocked = true, insertKeyWasPressed, isMenuOpen, esp = true, itemEsp = true, enemyEsp = true, addMoney;
 
-    static Hacks instance;
-    internal static Hacks Instance => instance ??= FindObjectOfType<Hacks>() ?? new GameObject("HacksSingleton").AddComponent<Hacks>();
+    internal static bool godMode, farScan = true, infCharge = true, infSprint = true, clock = true;
+    internal static int excScrap;
 
-    void Awake()
-    {
-        if (instance is null)
-        {
-            instance = this;
-            DontDestroyOnLoad(gameObject);
-            return;
-        }
-        Destroy(gameObject);
-    }
     void Start()
     {
-        using (var rg = RandomNumberGenerator.Create())
-        {
-            var bytes = new byte[5];
-            rg.GetBytes(bytes);
-            windowId = BitConverter.ToInt32(bytes, 0);
-        }
         try
         {
             new Harmony("com.p1st.LCHack").PatchAll();
         }
-        catch (Exception ex)
+        catch (Exception e)
         {
-            Logger.Log("Error during Harmony patching: " + ex.Message);
+            Debug.LogWarning($"Error during Harmony patching: {e.Message}\n");
         }
         StartCoroutine(CacheRefreshRoutine());
     }
 
-    IEnumerator CacheRefreshRoutine()
+    static IEnumerator CacheRefreshRoutine()
     {
         while (true)
         {
@@ -61,92 +45,93 @@ internal sealed class Hacks : MonoBehaviour
             CacheObjects<PlayerControllerB>();
             CacheObjects<SteamValveHazard>();
             CacheObjects<EnemyAI>();
-            UpdateEnemyCount();
 
-            yield return new WaitForSeconds(2.5f);
+            yield return new WaitForSecondsRealtime(1.5f);
         }
     }
 
-    int enemyCount;
-    void UpdateEnemyCount()
-    {
-        if (cache.TryGetValue(typeof(EnemyAI), out var list)) enemyCount = list.Length;
-        else enemyCount = 0;
-    }
+    static readonly Dictionary<Type, Object[]> cache = [];
 
-    readonly Dictionary<Type, Component[]> cache = [];
-    void CacheObjects<T>() where T : Component => cache[typeof(T)] = FindObjectsOfType<T>();
+    static void CacheObjects<T>() where T : Component => cache[typeof(T)] = FindObjectsOfType(typeof(T));
 
-    static bool WorldToScreen(Camera camera, Vector3 world, out Vector3 screen)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static bool WorldToScreen(Vector3 world, out Vector3 screen)
     {
-        screen = camera.WorldToViewportPoint(world);
+        screen = server.gameplayCamera.WorldToViewportPoint(world);
+        var visible = screen.x > 0 && screen.x < 1 && screen.y > 0 && screen.y < 1 && screen.z > 0;
+
         screen.x *= Screen.width;
         screen.y *= Screen.height;
         screen.y = Screen.height - screen.y;
-        return screen.z > 0;
+
+        return visible;
     }
 
-    void ProcessObjects<T>(Func<T, Vector3, string> labelBuilder, Color labelColor) where T : Component
+    static void ProcessObjects<T>(Func<T, Vector3, string> labelBuilder, Color labelColor) where T : Component
     {
-        if (cache.TryGetValue(typeof(T), out var source)) for (var i = 0; i < source.Length; ++i) if (source[i] is T obj)
+        if (cache.TryGetValue(typeof(T), out var source)) foreach (T obj in source)
         {
-            if (obj is GrabbableObject GO && (GO.isPocketed || GO.isHeld || GO.itemProperties.itemName is "clipboard" or "Sticky note")) continue;
-            if (obj is SteamValveHazard valve && !valve.triggerScript.interactable) continue;
-            if (obj is Terminal terminal && addMoney)
+            if ((obj is GrabbableObject g && (g.isPocketed || g.isHeld)) || 
+                (obj is GrabbableObject g2 && g2.itemProperties.itemName is "clipboard" or "Sticky note") ||
+                (obj is SteamValveHazard v && !v.triggerScript.interactable)) continue;
+
+            if (obj is Terminal t && addMoney)
             {
-                if (GameNetworkManager.Instance.localPlayerController.IsServer)
-                {
-                    terminal.groupCredits += 200;
-                    addMoney = false;
-                }
-                else
-                {
-                    terminal.groupCredits += 200;
-                    terminal.SyncGroupCreditsServerRpc(terminal.groupCredits, terminal.numberOfItemsInDropship);
-                    addMoney = false;
-                }
+                t.groupCredits += 100;
+                if (!server.IsServer) t.SyncGroupCreditsServerRpc(t.groupCredits, t.numberOfItemsInDropship);
+                addMoney = false;
             }
-            if (WorldToScreen(GameNetworkManager.Instance.localPlayerController.gameplayCamera, obj.transform.position, out var screen))
-                DrawLabel(screen, labelBuilder(obj, screen), labelColor, Vector3.Distance(GameNetworkManager.Instance.localPlayerController.gameplayCamera.transform.position, obj.transform.position));
+            if (WorldToScreen(obj.transform.position, out var screen)) DrawLabel(screen, labelBuilder(obj, screen), labelColor, obj.transform.position);
         }
     }
-    void ProcessPlayers()
+    static void ProcessPlayers()
     {
-        if (cache.TryGetValue(typeof(PlayerControllerB), out var source)) for (var i = 0; i < source.Length; ++i) if (source[i] is PlayerControllerB player && !player.isPlayerDead && !player.IsLocalPlayer && player.isPlayerControlled && WorldToScreen(GameNetworkManager.Instance.localPlayerController.gameplayCamera, player.transform.position, out var screen))
-            DrawLabel(screen, player.playerUsername + " ", Color.green, Vector3.Distance(GameNetworkManager.Instance.localPlayerController.gameplayCamera.transform.position, player.transform.position));
-    }
-    void ProcessEnemies()
-    {
-        if (cache.TryGetValue(typeof(EnemyAI), out var source)) for (var i = 0; i < source.Length; ++i) if (source[i] is EnemyAI enemy && WorldToScreen(GameNetworkManager.Instance.localPlayerController.gameplayCamera, enemy.transform.position, out var screen))
-            DrawLabel(screen, !string.IsNullOrWhiteSpace(enemy.enemyType.enemyName) ? enemy.enemyType.enemyName + " " : "Unknown Enemy ", Color.red, Vector3.Distance(GameNetworkManager.Instance.localPlayerController.gameplayCamera.transform.position, enemy.transform.position));
+        if (cache.TryGetValue(typeof(PlayerControllerB), out var source)) foreach (PlayerControllerB pl in source) if (!pl.IsLocalPlayer && pl.isPlayerControlled && WorldToScreen(pl.transform.position, out var screen))
+            DrawLabel(screen, pl.playerUsername + (pl.isPlayerDead ? " (Dead)" : " "), Color.green, pl.transform.position);
     }
 
-    static void DrawLabel(Vector3 screenPosition, string text, Color color, float distance)
+    static int enemyCount;
+    static void ProcessEnemies()
+    {
+        if (cache.TryGetValue(typeof(EnemyAI), out var source))
+        {
+            foreach (EnemyAI e in source) if (WorldToScreen(e.transform.position, out var screen))
+                DrawLabel(screen, !string.IsNullOrWhiteSpace(e.enemyType.enemyName) ? e.enemyType.enemyName + " " : "Unknown Enemy ", Color.red, e.transform.position);
+
+            enemyCount = source.Length;
+        }
+        else enemyCount = 0;
+    }
+
+    static void DrawLabel(Vector3 screen, string text, Color color, Vector3 distObj)
     {
         GUI.contentColor = color;
-        GUI.Label(new(screenPosition.x, screenPosition.y, 75, 50), $"{text}{Mathf.RoundToInt(distance * 3.28084f)} ft");
+        GUI.Label(new(screen, new(75, 50)), $"{text}{Vector3.Distance(server.transform.position, distObj):f0}m");
     }
 
-    Rect windowRect = new(100, 100, 300, 500);
+    static Rect windowRect = new(100, 100, 300, 500);
+    const string on = "on", off = "off";
+
     void OnGUI()
     {
         GUI.Label(new(10, 5, 200, 30), "Lethal Company Menu v1.3.7");
-        if (StartOfRound.Instance is not null) GUI.Label(new(10, 25, 200, 30), enemyCount == 1 ? $"{enemyCount} enemy" : $"{enemyCount} enemies");
 
-        const string on = "on", off = "off";
-        if (isMenuOpen) windowRect = GUILayout.Window(windowId, windowRect, _ =>
+        server = GameNetworkManager.Instance.localPlayerController;
+        if (server is not null) GUI.Label(new(10, 25, 200, 30), enemyCount == 1 ? $"{enemyCount} enemy" : $"{enemyCount} enemies");
+
+        if (isMenuOpen) windowRect = GUILayout.Window(short.MinValue, windowRect, _ =>
         {
             GUILayout.Label("Master ESP: " + (esp ? on : off));
             GUILayout.Label("Item ESP: " + (itemEsp ? on : off));
             GUILayout.Label("Enemy ESP: " + (enemyEsp ? on : off));
-            GUILayout.Label("Godmode: " + (godMode ? on : off));
-            GUILayout.Label("Infinite sprint: " + (infSprint ? on : off));
+            GUILayout.Label("Invincible (non insta-kill): " + (godMode ? on : off));
+            GUILayout.Label("Infinite Sprint: " + (infSprint ? on : off));
             GUILayout.Label("Unlimited Scan Range: " + (farScan ? on : off));
             GUILayout.Label("Unlimited Item Power: " + (infCharge ? on : off));
-            GUILayout.Label("High Scrap Value: " + (highItemVal ? on : off));
+            GUILayout.Label($"Scrap Value: {excScrap:n0}");
             GUILayout.Label("Show Clock: " + (clock ? on : off));
 
-            if (GUILayout.Button("Toggle Godmode")) godMode = !godMode;
+            if (GUILayout.Button("Toggle Invincibility")) godMode = !godMode;
             if (GUILayout.Button("Toggle Infinite Sprint")) infSprint = !infSprint;
             if (GUILayout.Button("Toggle All ESP")) esp = !esp;
             if (GUILayout.Button("Toggle Item ESP")) itemEsp = !itemEsp;
@@ -159,19 +144,25 @@ internal sealed class Hacks : MonoBehaviour
             if (GUILayout.Button("Toggle Unlimited Item Power")) infCharge = !infCharge;
 
             GUILayout.Label("Host only features:");
-            if (GUILayout.Button("Set Quota Reached") && TimeOfDay.Instance is not null)
+
+            var t = TimeOfDay.Instance;
+            if (GUILayout.Button("Set Quota Reached") && t is not null)
             {
-                TimeOfDay.Instance.quotaFulfilled = TimeOfDay.Instance.profitQuota;
-                TimeOfDay.Instance.UpdateProfitQuotaCurrentTime();
+                t.quotaFulfilled = t.profitQuota;
+                t.UpdateProfitQuotaCurrentTime();
             }
-            if (GUILayout.Button("High scrap value")) highItemVal = !highItemVal;
+
+            GUILayout.Label("Set Scrap Value");
+            var text = GUILayout.TextField($"{excScrap:f0}");
+            if (string.IsNullOrWhiteSpace(text)) excScrap = 0;
+            else if (ulong.TryParse(text, out var exc)) excScrap = (int)Mathf.Clamp(exc, 0, 1000000);
 
             GUI.DragWindow();
         }, "Lethal Company");
 
         if (esp)
         {
-            ProcessObjects<EntranceTeleport>((entrance, _) => !entrance.isEntranceToBuilding ? " Exit " : " Entrance ", Color.cyan);
+            ProcessObjects<EntranceTeleport>((entrance, _) => entrance.isEntranceToBuilding ? " Entrance " : " Exit ", Color.cyan);
             ProcessObjects<Landmine>((_, _) => "Landmine ", Color.red);
             ProcessObjects<Turret>((_, _) => "Turret ", Color.red);
             ProcessObjects<Terminal>((_, _) => "Ship Terminal ", Color.magenta);
@@ -181,22 +172,17 @@ internal sealed class Hacks : MonoBehaviour
             if (itemEsp) ProcessObjects<GrabbableObject>((grabbableObject, _) => grabbableObject.itemProperties.itemName + " ", Color.blue);
             if (enemyEsp) ProcessEnemies();
         }
-        if (StartOfRound.Instance is not null && infCharge && GameNetworkManager.Instance.localPlayerController.currentlyHeldObjectServer is not null && GameNetworkManager.Instance.localPlayerController.IsServer)
-            GameNetworkManager.Instance.localPlayerController.currentlyHeldObjectServer.insertedBattery.charge = 1;
+        if (infCharge && server.currentlyHeldObjectServer is not null && server.IsServer) server.currentlyHeldObjectServer.insertedBattery.charge = 1;
     }
 
     [DllImport("user32")] [MethodImpl(MethodImplOptions.AggressiveInlining)]
     static extern short GetAsyncKeyState(int vKey);
 
-    float lastToggleTime;
     void Update()
     {
         var keyDown = (GetAsyncKeyState(45) & 0x8000) > 0;
-        if (keyDown && !insertKeyWasPressed && Time.time - lastToggleTime > .5f)
-        {
-            isMenuOpen = !isMenuOpen;
-            lastToggleTime = Time.time;
-        }
+        if (keyDown && !insertKeyWasPressed) isMenuOpen = !isMenuOpen;
+
         if (StartOfRound.Instance is not null)
         {
             if (isMenuOpen)

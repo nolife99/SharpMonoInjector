@@ -6,10 +6,6 @@ namespace SharpMonoInjector;
 
 public static class Native
 {
-    [DllImport("kernel32", SetLastError = true)]
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static extern bool CloseHandle(nint handle);
-
     [DllImport("advapi32", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static extern bool OpenProcessToken(SafeProcessHandle ProcessHandle, int DesiredAccess, out SafeAccessTokenHandle TokenHandle);

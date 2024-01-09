@@ -31,9 +31,7 @@ public sealed class ProcessMemory(Process process) : IDisposable
     public unsafe T Read<T>(nint addr) where T : unmanaged
     {
         T ret;
-        if (!Native.ReadProcessMemory(process.SafeHandle, addr, (nint)(&ret), sizeof(T)))
-            throw new InjectorException("Failed to read process memory", new Win32Exception(Marshal.GetLastWin32Error()));
-        
+        if (!Native.ReadProcessMemory(process.SafeHandle, addr, (nint)(&ret), sizeof(T))) throw new InjectorException("Failed to read process memory", new Win32Exception());
         return ret;
     }
 
@@ -49,15 +47,14 @@ public sealed class ProcessMemory(Process process) : IDisposable
     public nint Allocate(int size)
     {
         var addr = Native.VirtualAllocEx(process.SafeHandle, 0, size, 0x00001000, 0x40);
-        if (addr == 0) throw new InjectorException("Failed to allocate process memory", new Win32Exception(Marshal.GetLastWin32Error()));
+        if (addr == 0) throw new InjectorException("Failed to allocate process memory", new Win32Exception());
 
         allocs.Add((addr, size));
         return addr;
     }
     public unsafe void Write(nint addr, ReadOnlySpan<byte> data)
     {
-        fixed (void* ptr = data) if (!Native.WriteProcessMemory(process.SafeHandle, addr, (nint)ptr, data.Length))
-            throw new InjectorException("Failed to write process memory", new Win32Exception(Marshal.GetLastWin32Error()));
+        fixed (void* ptr = data) if (!Native.WriteProcessMemory(process.SafeHandle, addr, (nint)ptr, data.Length)) throw new InjectorException("Failed to write process memory", new Win32Exception());
     }
 
     ~ProcessMemory() => Dispose(false);

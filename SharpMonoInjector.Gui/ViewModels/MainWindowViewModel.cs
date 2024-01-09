@@ -2,6 +2,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows;
@@ -23,7 +24,7 @@ public partial class MainWindowViewModel : ViewModel
             Status = "Refreshing processes";
 
             Processes = [];
-            Trace.WriteLine("[MainWindowViewModel] - Checking Processes for Mono");
+            Trace.WriteLine("[MainWindowViewModel] - Checking processes for Mono");
 
             await Parallel.ForEachAsync(Process.GetProcesses(), (p, t) => 
             {
@@ -62,7 +63,7 @@ public partial class MainWindowViewModel : ViewModel
                 Status = "No Mono process found";
                 Trace.WriteLine("No Mono process found");
             }
-        }, () => !IsRefreshing);
+        }, () => !isRefreshing);
 
         BrowseCommand = new(() =>
         {
@@ -95,10 +96,11 @@ public partial class MainWindowViewModel : ViewModel
 
             try
             {
-                using Injector injector = new(Process.GetProcessById(selectedProcess.Id), selectedProcess.MonoModule);
                 await Task.Run(() =>
                 {
+                    using Injector injector = new(selectedProcess.Id);
                     var asm = injector.Inject(file, injectNamespace, injectClassName, injectMethodName);
+
                     InjectedAssemblies = injectedAssemblies.Add(new()
                     {
                         ProcessId = selectedProcess.Id,
@@ -109,16 +111,24 @@ public partial class MainWindowViewModel : ViewModel
                 });
                 Status = "Injected " + filename;
             }
+            catch (ArgumentException)
+            {
+                Status = "Injection failed: The selected process isn't running";
+                InjectedAssemblies = injectedAssemblies.RemoveAll(s => selectedAssembly.ProcessId == s.ProcessId);
+                Processes = processes.RemoveAll(p => selectedProcess.Id == p.Id);
+            }
             catch (InjectorException e)
             {
                 Status = "Injection failed: " + e.Message;
+                Trace.WriteLine("Injection failed: " + e.ToString());
             }
             catch (Exception e)
             {
                 Status = "Injection failed (unknown error): " + e.Message;
+                Trace.WriteLine("Injection failed: " + e.ToString());
             }
             IsExecuting = false;
-        }, () => selectedProcess.Id != 0 && File.Exists(assemblyPath) && !string.IsNullOrWhiteSpace(injectClassName) && !string.IsNullOrWhiteSpace(injectMethodName) && !IsExecuting);
+        }, () => selectedProcess.MonoModule != 0 && File.Exists(assemblyPath) && !string.IsNullOrWhiteSpace(injectClassName) && !string.IsNullOrWhiteSpace(injectMethodName) && !isExecuting);
 
         EjectCommand = new(async () =>
         {
@@ -127,26 +137,35 @@ public partial class MainWindowViewModel : ViewModel
 
             try
             {
-                using Injector injector = new(selectedAssembly.ProcessId);
                 await Task.Run(() =>
                 {
+                    using Injector injector = new(selectedProcess.Id);
                     injector.Eject(selectedAssembly.Address, ejectNamespace, ejectClassName, ejectMethodName);
+
                     InjectedAssemblies = injectedAssemblies.Remove(selectedAssembly);
                 });
                 Status = "Ejected " + selectedAssembly.Name;
             }
-            catch (InjectorException ie)
+            catch (ArgumentException)
             {
-                Status = "Ejection failed: " + ie.Message;
+                Status = "Ejection failed: The selected assembly's process isn't running";
+                InjectedAssemblies = injectedAssemblies.RemoveAll(s => selectedAssembly.ProcessId == s.ProcessId);
+                Processes = processes.RemoveAll(p => selectedAssembly.ProcessId == p.Id);
+            }
+            catch (InjectorException e)
+            {
+                Status = "Ejection failed: " + e.Message;
+                Trace.WriteLine("Ejection failed: " + e.ToString());
             }
             catch (Exception e)
             {
                 Status = "Ejection failed (unknown error): " + e.Message;
+                Trace.WriteLine("Ejection failed: " + e.ToString());
             }
             IsExecuting = false;
-        }, () => selectedAssembly.ProcessId != 0 && !string.IsNullOrWhiteSpace(ejectClassName) && !string.IsNullOrWhiteSpace(ejectMethodName) && !IsExecuting);
+        }, () => selectedAssembly.ProcessId != 0 && !string.IsNullOrWhiteSpace(ejectClassName) && !string.IsNullOrWhiteSpace(ejectMethodName) && !isExecuting);
 
-        CopyStatusCommand = new(() => Clipboard.SetText(Status));
+        CopyStatusCommand = new(() => Clipboard.SetText(status));
     }
 
     public RelayCommand RefreshCommand { get; }

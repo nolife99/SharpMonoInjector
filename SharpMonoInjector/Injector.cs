@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace SharpMonoInjector;
@@ -61,14 +60,6 @@ public sealed class Injector : IDisposable
         Is64Bit = ProcessUtils.Is64BitProcess(process = Process.GetProcessById(processId));
         if (!ProcessUtils.GetMonoModule(process, out mono)) throw new InjectorException("Error while finding mono in target process");
         memory = new(process);
-    }
-    public Injector(Process proc, nint monoModule)
-    {
-        process = proc;
-        mono = monoModule;
-
-        Is64Bit = ProcessUtils.Is64BitProcess(proc);
-        memory = new(proc);
     }
 
     public void Dispose()
@@ -197,9 +188,9 @@ public sealed class Injector : IDisposable
         var retValPtr = Is64Bit ? memory.Allocate(8) : memory.Allocate(4);
 
         var thread = Native.CreateRemoteThread(process.SafeHandle, 0, 0, memory.AllocateAndWrite(Assemble(addr, retValPtr, args)), 0, 0, out _);
-        if (thread == 0) throw new InjectorException("Failed to create remote thread", new Win32Exception(Marshal.GetLastWin32Error()));
+        if (thread == 0) throw new InjectorException("Failed to create remote thread", new Win32Exception());
 
-        if (Native.WaitForSingleObject(thread, -1) == 0xFFFFFFFF) throw new InjectorException("Failed to wait for remote thread", new Win32Exception(Marshal.GetLastWin32Error()));
+        if (Native.WaitForSingleObject(thread, -1) == 0xFFFFFFFF) throw new InjectorException("Failed to wait for remote thread", new Win32Exception());
         var ret = Is64Bit ? (nint)memory.Read<long>(retValPtr) : memory.Read<int>(retValPtr);
         if (ret == 0x00000000C0000005) throw new InjectorException($"Access violation while executing {exports.First(e => e.Value == addr).Key}()");
 

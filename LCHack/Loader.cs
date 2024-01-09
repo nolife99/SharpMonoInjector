@@ -9,7 +9,6 @@ namespace LCHack;
 sealed class Loader
 {
     static GameObject Load;
-    static AppDomain domain;
 
     static void Init()
     {
@@ -17,14 +16,12 @@ sealed class Loader
         Load.AddComponent<Hacks>();
 
         Object.DontDestroyOnLoad(Load);
-        domain = AppDomain.CreateDomain("lc");
         AppDomain.CurrentDomain.AssemblyResolve += Resolve;
     }
     static void Unload()
     {
         Object.Destroy(Load);
         AppDomain.CurrentDomain.AssemblyResolve -= Resolve;
-        AppDomain.Unload(domain);
     }
     static Assembly Resolve(object sender, ResolveEventArgs args)
     {
@@ -33,6 +30,6 @@ sealed class Loader
 
         var numArray = new byte[streamLen];
         resource.Read(numArray, 0, streamLen);
-        return domain.Load(numArray);
+        return Assembly.Load(numArray);
     }
 }
