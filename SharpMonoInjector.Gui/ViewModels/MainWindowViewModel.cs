@@ -30,12 +30,12 @@ public partial class MainWindowViewModel : ViewModel
             {
                 using (p) try
                 {
-                    if (!GetProcessUser(p).IsEmpty && p.Id != Environment.ProcessId)
+                    if (GetProcessUser(p) && p.Id != Environment.ProcessId)
                     {
-                        Trace.WriteLine("\t" + p.ProcessName + ".exe");
+                        Trace.WriteLine($"\t{p.ProcessName}.exe");
                         if (ProcessUtils.GetMonoModule(p, out var mono))
                         {
-                            Trace.WriteLine("\t\tMono found in process: " + p.ProcessName + ".exe");
+                            Trace.WriteLine($"\t\tMono found in process: {p.ProcessName}.exe");
                             Processes = processes.Add(new()
                             {
                                 MonoModule = mono,
@@ -47,7 +47,7 @@ public partial class MainWindowViewModel : ViewModel
                 }
                 catch (Exception e)
                 {
-                    Trace.WriteLine("\tERROR SCANNING: " + p.ProcessName + " - " + e.Message);
+                    Trace.WriteLine($"\tERROR SCANNING: {p.ProcessName} - {e}");
                 }
                 return new();
             });
@@ -87,7 +87,8 @@ public partial class MainWindowViewModel : ViewModel
             }
             catch (IOException e)
             {
-                Status = $"Failed to load {assemblyPath} {e.Message}";
+                Status = $"Failed to load {filename}: {e.Message}";
+                Trace.WriteLine($"Failed to load {filename}: {e}");
                 return;
             }
 
@@ -98,13 +99,11 @@ public partial class MainWindowViewModel : ViewModel
             {
                 await Task.Run(() =>
                 {
-                    using Injector injector = new(selectedProcess.Id);
-                    var asm = injector.Inject(file, injectNamespace, injectClassName, injectMethodName);
-
-                    InjectedAssemblies = injectedAssemblies.Add(new()
+                    using Injector injector = new(Process.GetProcessById(selectedProcess.Id), selectedProcess.MonoModule);
+                    InjectedAssemblies = assemblies.Add(new()
                     {
                         ProcessId = selectedProcess.Id,
-                        Address = asm,
+                        Address = injector.Inject(file, injectNamespace, injectClassName, injectMethodName),
                         Name = filename,
                         Is64Bit = injector.Is64Bit
                     });
@@ -114,18 +113,21 @@ public partial class MainWindowViewModel : ViewModel
             catch (ArgumentException)
             {
                 Status = "Injection failed: The selected process isn't running";
-                InjectedAssemblies = injectedAssemblies.RemoveAll(s => selectedAssembly.ProcessId == s.ProcessId);
+                InjectedAssemblies = assemblies.RemoveAll(s => selectedProcess.Id == s.ProcessId);
                 Processes = processes.RemoveAll(p => selectedProcess.Id == p.Id);
+
+                if (assemblies.Count == 0) SelectedAssembly = default;
+                if (processes.Count == 0) SelectedProcess = default;
             }
             catch (InjectorException e)
             {
                 Status = "Injection failed: " + e.Message;
-                Trace.WriteLine("Injection failed: " + e.ToString());
+                Trace.WriteLine($"Injection failed: {e}");
             }
             catch (Exception e)
             {
                 Status = "Injection failed (unknown error): " + e.Message;
-                Trace.WriteLine("Injection failed: " + e.ToString());
+                Trace.WriteLine($"Injection failed: {e}");
             }
             IsExecuting = false;
         }, () => selectedProcess.MonoModule != 0 && File.Exists(assemblyPath) && !string.IsNullOrWhiteSpace(injectClassName) && !string.IsNullOrWhiteSpace(injectMethodName) && !isExecuting);
@@ -139,31 +141,32 @@ public partial class MainWindowViewModel : ViewModel
             {
                 await Task.Run(() =>
                 {
-                    using Injector injector = new(selectedProcess.Id);
-                    injector.Eject(selectedAssembly.Address, ejectNamespace, ejectClassName, ejectMethodName);
-
-                    InjectedAssemblies = injectedAssemblies.Remove(selectedAssembly);
+                    using (Injector injector = new(selectedAssembly.ProcessId)) injector.Eject(selectedAssembly.Address, ejectNamespace, ejectClassName, ejectMethodName);
+                    InjectedAssemblies = assemblies.Remove(selectedAssembly);
                 });
                 Status = "Ejected " + selectedAssembly.Name;
             }
             catch (ArgumentException)
             {
                 Status = "Ejection failed: The selected assembly's process isn't running";
-                InjectedAssemblies = injectedAssemblies.RemoveAll(s => selectedAssembly.ProcessId == s.ProcessId);
+                InjectedAssemblies = assemblies.RemoveAll(s => selectedAssembly.ProcessId == s.ProcessId);
                 Processes = processes.RemoveAll(p => selectedAssembly.ProcessId == p.Id);
+
+                if (assemblies.Count == 0) SelectedAssembly = default;
+                if (processes.Count == 0) SelectedProcess = default;
             }
             catch (InjectorException e)
             {
                 Status = "Ejection failed: " + e.Message;
-                Trace.WriteLine("Ejection failed: " + e.ToString());
+                Trace.WriteLine($"Ejection failed: {e}");
             }
             catch (Exception e)
             {
                 Status = "Ejection failed (unknown error): " + e.Message;
-                Trace.WriteLine("Ejection failed: " + e.ToString());
+                Trace.WriteLine($"Ejection failed: {e}");
             }
             IsExecuting = false;
-        }, () => selectedAssembly.ProcessId != 0 && !string.IsNullOrWhiteSpace(ejectClassName) && !string.IsNullOrWhiteSpace(ejectMethodName) && !isExecuting);
+        }, () => selectedAssembly.Address != 0 && !string.IsNullOrWhiteSpace(ejectClassName) && !string.IsNullOrWhiteSpace(ejectMethodName) && !isExecuting);
 
         CopyStatusCommand = new(() => Clipboard.SetText(status));
     }
@@ -283,11 +286,11 @@ public partial class MainWindowViewModel : ViewModel
         }
     }
 
-    ImmutableList<InjectedAssembly> injectedAssemblies = [];
+    ImmutableList<InjectedAssembly> assemblies = [];
     public ImmutableList<InjectedAssembly> InjectedAssemblies
     {
-        get => injectedAssemblies;
-        set => Set(ref injectedAssemblies, value);
+        get => assemblies;
+        set => Set(ref assemblies, value);
     }
 
     InjectedAssembly selectedAssembly;
@@ -330,7 +333,7 @@ public partial class MainWindowViewModel : ViewModel
         }
     }
 
-    static ReadOnlySpan<char> GetProcessUser(Process process)
+    static bool GetProcessUser(Process process)
     {
         try
         {
@@ -338,14 +341,13 @@ public partial class MainWindowViewModel : ViewModel
             using (token)
             {
                 using WindowsIdentity id = new(token.DangerousGetHandle());
-                var user = id.Name.AsSpan();
-                return user.Contains('\\') ? user[(user.IndexOf('\\') + 1)..] : user;
+                return !string.IsNullOrWhiteSpace(id.Name);
             }
         }
         catch (Exception e)
         {
             Trace.WriteLine(string.Concat("\tError getting user process: ", process.ProcessName, " - ", e.Message));
-            return [];
+            return false;
         }
     }
 }

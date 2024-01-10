@@ -1,8 +1,6 @@
-﻿using System;
-using System.Reflection;
+﻿using System.Reflection;
+using System.Threading;
 using UnityEngine;
-
-using Object = UnityEngine.Object;
 
 namespace LCHack;
 
@@ -12,24 +10,21 @@ sealed class Loader
 
     static void Init()
     {
-        Load = new();
-        Load.AddComponent<Hacks>();
-
-        Object.DontDestroyOnLoad(Load);
-        AppDomain.CurrentDomain.AssemblyResolve += Resolve;
+        Object.DontDestroyOnLoad(Load = new(null, typeof(Hacks)));
+        Thread.GetDomain().AssemblyResolve += Resolve;
     }
     static void Unload()
     {
         Object.Destroy(Load);
-        AppDomain.CurrentDomain.AssemblyResolve -= Resolve;
+        Thread.GetDomain().AssemblyResolve -= Resolve;
     }
-    static Assembly Resolve(object sender, ResolveEventArgs args)
+    static Assembly Resolve(object sender, System.ResolveEventArgs args)
     {
-        using var resource = typeof(Loader).Assembly.GetManifestResourceStream("LCHack.0Harmony.dll");
-        var streamLen = (int)resource.Length;
+        using var patch = typeof(Loader).Assembly.GetManifestResourceStream("LCHack.0Harmony.dll");
+        var len = (int)patch.Length;
 
-        var numArray = new byte[streamLen];
-        resource.Read(numArray, 0, streamLen);
-        return Assembly.Load(numArray);
+        var bytes = new byte[len];
+        patch.Read(bytes, 0, len);
+        return Assembly.Load(bytes);
     }
 }

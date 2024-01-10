@@ -45,9 +45,11 @@ public static class ProcessUtils
             if (new string(path, 0, Native.GetModuleFileNameExA(process.SafeHandle, ptrs[i], (nint)path, MAX_PATH)).Contains("mono", StringComparison.OrdinalIgnoreCase))
             {
                 if (!Native.GetModuleInformation(process.SafeHandle, ptrs[i], out var info, bytesNeeded)) throw new InjectorException("Failed to get module information", new Win32Exception());
-
-                monoModule = info;
-                return true;
+                if (GetExportedFunctions(process, info).Any(x => x.Name == "mono_get_root_domain"))
+                {
+                    monoModule = info;
+                    return true;
+                }
             }
         }
         catch (Exception e)

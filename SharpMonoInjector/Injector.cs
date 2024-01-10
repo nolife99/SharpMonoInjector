@@ -61,6 +61,12 @@ public sealed class Injector : IDisposable
         if (!ProcessUtils.GetMonoModule(process, out mono)) throw new InjectorException("Error while finding mono in target process");
         memory = new(process);
     }
+    public Injector(Process proc, nint monoMod)
+    {
+        Is64Bit = ProcessUtils.Is64BitProcess(process = proc);
+        mono = monoMod;
+        memory = new(process);
+    }
 
     public void Dispose()
     {

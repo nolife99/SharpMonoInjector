@@ -1,37 +1,37 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using GameNetcodeStuff;
 using HarmonyLib;
 using UnityEngine;
 
-using Object = UnityEngine.Object;
-
 namespace LCHack;
 
 internal sealed class Hacks : MonoBehaviour
 {
-    static PlayerControllerB server;
-    static bool cursorIsLocked = true, insertKeyWasPressed, isMenuOpen, esp = true, itemEsp = true, enemyEsp = true, addMoney;
+    public static bool godMode, farScan = true, infCharge = true, infSprint = true, clock = true, cursorIsLocked = true, insertKeyWasPressed, isMenuOpen, esp = true, itemEsp = true, enemyEsp = true, addMoneySignal;
+    public static int excScrap, addMoney;
+    static string moneyS, scrapS;
 
-    internal static bool godMode, farScan = true, infCharge = true, infSprint = true, clock = true;
-    internal static int excScrap;
+    static PlayerControllerB client;
+    static Rect windowRect = new(100, 100, 300, 300);
+    const string on = "on", off = "off";
 
     void Start()
     {
         try
         {
-            new Harmony("com.p1st.LCHack").PatchAll();
+            if (!Harmony.HasAnyPatches("com.p1st.LCHack")) new Harmony("com.p1st.LCHack").PatchAll();
         }
         catch (Exception e)
         {
-            Debug.LogWarning($"Error during Harmony patching: {e.Message}\n");
+            Debug.LogException(e);
         }
         StartCoroutine(CacheRefreshRoutine());
     }
-
     static IEnumerator CacheRefreshRoutine()
     {
         while (true)
@@ -50,14 +50,13 @@ internal sealed class Hacks : MonoBehaviour
         }
     }
 
-    static readonly Dictionary<Type, Object[]> cache = [];
-
-    static void CacheObjects<T>() where T : Component => cache[typeof(T)] = FindObjectsOfType(typeof(T));
+    static readonly Dictionary<Type, Array> cache = [];
+    static void CacheObjects<T>() => cache[typeof(T)] = FindObjectsOfType(typeof(T));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     static bool WorldToScreen(Vector3 world, out Vector3 screen)
     {
-        screen = server.gameplayCamera.WorldToViewportPoint(world);
+        screen = client.gameplayCamera.WorldToViewportPoint(world);
         var visible = screen.x > 0 && screen.x < 1 && screen.y > 0 && screen.y < 1 && screen.z > 0;
 
         screen.x *= Screen.width;
@@ -75,11 +74,11 @@ internal sealed class Hacks : MonoBehaviour
                 (obj is GrabbableObject g2 && g2.itemProperties.itemName is "clipboard" or "Sticky note") ||
                 (obj is SteamValveHazard v && !v.triggerScript.interactable)) continue;
 
-            if (obj is Terminal t && addMoney)
+            if (obj is Terminal t && addMoneySignal)
             {
-                t.groupCredits += 100;
-                if (!server.IsServer) t.SyncGroupCreditsServerRpc(t.groupCredits, t.numberOfItemsInDropship);
-                addMoney = false;
+                t.groupCredits += addMoney;
+                if (!client.IsServer) t.SyncGroupCreditsServerRpc(t.groupCredits, t.numberOfItemsInDropship);
+                addMoneySignal = false;
             }
             if (WorldToScreen(obj.transform.position, out var screen)) DrawLabel(screen, labelBuilder(obj, screen), labelColor, obj.transform.position);
         }
@@ -106,78 +105,60 @@ internal sealed class Hacks : MonoBehaviour
     static void DrawLabel(Vector3 screen, string text, Color color, Vector3 distObj)
     {
         GUI.contentColor = color;
-        GUI.Label(new(screen, new(75, 50)), $"{text}{Vector3.Distance(server.transform.position, distObj):f0}m");
+        GUI.Label(new(screen, new(75, 50)), $"{text}{Vector3.Distance(client.transform.position, distObj):n0} ft");
     }
-
-    static Rect windowRect = new(100, 100, 300, 500);
-    const string on = "on", off = "off";
-
     void OnGUI()
     {
         GUI.Label(new(10, 5, 200, 30), "Lethal Company Menu v1.3.7");
-
-        server = GameNetworkManager.Instance.localPlayerController;
-        if (server is not null) GUI.Label(new(10, 25, 200, 30), enemyCount == 1 ? $"{enemyCount} enemy" : $"{enemyCount} enemies");
+        if ((client = GameNetworkManager.Instance.localPlayerController) is not null) GUI.Label(new(10, 25, 200, 30), $"{enemyCount:n0} enem{(enemyCount == 1 ? "y" : "ies")}");
 
         if (isMenuOpen) windowRect = GUILayout.Window(short.MinValue, windowRect, _ =>
         {
-            GUILayout.Label("Master ESP: " + (esp ? on : off));
-            GUILayout.Label("Item ESP: " + (itemEsp ? on : off));
-            GUILayout.Label("Enemy ESP: " + (enemyEsp ? on : off));
-            GUILayout.Label("Invincible (non insta-kill): " + (godMode ? on : off));
-            GUILayout.Label("Infinite Sprint: " + (infSprint ? on : off));
-            GUILayout.Label("Unlimited Scan Range: " + (farScan ? on : off));
-            GUILayout.Label("Unlimited Item Power: " + (infCharge ? on : off));
-            GUILayout.Label($"Scrap Value: {excScrap:n0}");
-            GUILayout.Label("Show Clock: " + (clock ? on : off));
+            if (GUILayout.Button("Toggle invincibility (non insta-kill): " + (godMode ? on : off))) godMode = !godMode;
+            if (GUILayout.Button("Toggle infinite sprint: " + (infSprint ? on : off))) infSprint = !infSprint;
+            if (GUILayout.Button("Toggle all ESP: " + (esp ? on : off))) esp = !esp;
+            if (GUILayout.Button("Toggle item ESP: " + (itemEsp ? on : off))) itemEsp = !itemEsp;
+            if (GUILayout.Button("Toggle enemy ESP: " + (enemyEsp ? on : off))) enemyEsp = !enemyEsp;
+            if (GUILayout.Button("Toggle distant scan: " + (farScan ? on : off))) farScan = !farScan;
+            if (GUILayout.Button("Show clock: " + (clock ? on : off))) clock = !clock;
 
-            if (GUILayout.Button("Toggle Invincibility")) godMode = !godMode;
-            if (GUILayout.Button("Toggle Infinite Sprint")) infSprint = !infSprint;
-            if (GUILayout.Button("Toggle All ESP")) esp = !esp;
-            if (GUILayout.Button("Toggle Item ESP")) itemEsp = !itemEsp;
-            if (GUILayout.Button("Toggle Enemy ESP")) enemyEsp = !enemyEsp;
-            if (GUILayout.Button("Unlimited Scan Range")) farScan = !farScan;
-            if (GUILayout.Button("Add 100 Cash")) addMoney = true;
-            if (GUILayout.Button("Show Clock")) clock = !clock;
+            if (GUILayout.Button($"Add money: {addMoney:n0}")) addMoneySignal = true;
+            moneyS = GUILayout.TextField(moneyS);
+            if (float.TryParse(moneyS, NumberStyles.Number, CultureInfo.InvariantCulture, out var add)) addMoney = (int)Mathf.Clamp(add, -20000000, 20000000);
 
-            GUILayout.Label("When non-host, drop the item on the ground and pick it back up for a full charge.");
-            if (GUILayout.Button("Toggle Unlimited Item Power")) infCharge = !infCharge;
+            GUILayout.Label("When non-host, drop the item and pick it back up for a full charge.");
+            if (GUILayout.Button("Toggle infinite battery: " + (infCharge ? on : off))) infCharge = !infCharge;
 
             GUILayout.Label("Host only features:");
 
             var t = TimeOfDay.Instance;
-            if (GUILayout.Button("Set Quota Reached") && t is not null)
+            if (GUILayout.Button("Set quota reached") && t is not null)
             {
                 t.quotaFulfilled = t.profitQuota;
                 t.UpdateProfitQuotaCurrentTime();
             }
 
-            GUILayout.Label("Set Scrap Value");
-            var text = GUILayout.TextField($"{excScrap:f0}");
-            if (string.IsNullOrWhiteSpace(text)) excScrap = 0;
-            else if (ulong.TryParse(text, out var exc)) excScrap = (int)Mathf.Clamp(exc, 0, 1000000);
+            GUILayout.Label($"Add scrap value: {excScrap:n0}");
+            scrapS = GUILayout.TextField(scrapS);
+            if (float.TryParse(scrapS, NumberStyles.Number, CultureInfo.InvariantCulture, out add)) excScrap = (int)Mathf.Clamp(add, -1000000, 1000000);
 
             GUI.DragWindow();
         }, "Lethal Company");
 
         if (esp)
         {
-            ProcessObjects<EntranceTeleport>((entrance, _) => entrance.isEntranceToBuilding ? " Entrance " : " Exit ", Color.cyan);
+            ProcessObjects<EntranceTeleport>((entry, _) => entry.isEntranceToBuilding ? " Entrance " : " Exit ", Color.cyan);
             ProcessObjects<Landmine>((_, _) => "Landmine ", Color.red);
             ProcessObjects<Turret>((_, _) => "Turret ", Color.red);
-            ProcessObjects<Terminal>((_, _) => "Ship Terminal ", Color.magenta);
+            ProcessObjects<Terminal>((_, _) => "Terminal ", Color.magenta);
             ProcessObjects<SteamValveHazard>((_, _) => "Steam Valve ", Color.yellow);
             ProcessPlayers();
 
-            if (itemEsp) ProcessObjects<GrabbableObject>((grabbableObject, _) => grabbableObject.itemProperties.itemName + " ", Color.blue);
+            if (itemEsp) ProcessObjects<GrabbableObject>((obj, _) => obj.itemProperties.itemName + " ", Color.blue);
             if (enemyEsp) ProcessEnemies();
         }
-        if (infCharge && server.currentlyHeldObjectServer is not null && server.IsServer) server.currentlyHeldObjectServer.insertedBattery.charge = 1;
+        if (infCharge && client.currentlyHeldObjectServer is not null && client.IsServer) client.currentlyHeldObjectServer.insertedBattery.charge = 1;
     }
-
-    [DllImport("user32")] [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static extern short GetAsyncKeyState(int vKey);
-
     void Update()
     {
         var keyDown = (GetAsyncKeyState(45) & 0x8000) > 0;
@@ -200,4 +181,7 @@ internal sealed class Hacks : MonoBehaviour
         }
         insertKeyWasPressed = keyDown;
     }
+
+    [DllImport("user32")] [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static extern short GetAsyncKeyState(int vKey);
 }
