@@ -7,8 +7,8 @@ namespace SharpMonoInjector;
 
 public readonly ref struct Assembler
 {
-    readonly List<byte> asm;
-    public Assembler() => asm = [];
+    readonly List<byte> ops;
+    public Assembler() => ops = [];
 
     public void CallRax() => AddStack([0xFF, 0xD0]);
     public void MovRax(nint arg)
@@ -35,12 +35,12 @@ public readonly ref struct Assembler
     public void CallEax() => AddStack([0xFF, 0xD0]);
     public void MovEax(nint arg)
     {
-        asm.Add(0xB8);
+        ops.Add(0xB8);
         AddArgAsBytes(ref Unsafe.As<nint, int>(ref arg));
     }
     public void MovEaxTo(nint arg)
     {
-        asm.Add(0xA3);
+        ops.Add(0xA3);
         AddArgAsBytes(ref arg);
     }
     public void MovR8(nint arg)
@@ -61,18 +61,18 @@ public readonly ref struct Assembler
     public void Push(nint arg)
     {
         ref var intArg = ref Unsafe.As<nint, int>(ref arg);
-        asm.Add(intArg < 128 ? (byte)0x6A : (byte)0x68);
+        ops.Add(intArg < 128 ? (byte)0x6A : (byte)0x68);
 
         if (intArg > 255) AddArgAsBytes(ref intArg);
-        else asm.Add(Unsafe.As<nint, byte>(ref arg));
+        else ops.Add(Unsafe.As<nint, byte>(ref arg));
     }
 
-    public void Return() => asm.Add(0xC3);
-    public ReadOnlySpan<byte> Compile() => CollectionsMarshal.AsSpan(asm);
+    public void Return() => ops.Add(0xC3);
+    public ReadOnlySpan<byte> Compile() => CollectionsMarshal.AsSpan(ops);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     void AddArgAsBytes<T>(ref T arg) => AddStack(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, byte>(ref arg), Unsafe.SizeOf<T>()));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void AddStack(ReadOnlySpan<byte> arg) => asm.AddRange(arg);
+    void AddStack(ReadOnlySpan<byte> arg) => ops.AddRange(arg);
 }

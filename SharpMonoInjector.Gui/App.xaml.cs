@@ -7,9 +7,9 @@ using System.Windows;
 
 namespace SharpMonoInjector.Gui;
 
-public partial class App : Application
+partial class App : Application
 {
-    public App()
+    App()
     {
         Trace.Listeners.Add(new TextWriterTraceListener(new StreamWriter(Path.Combine(Environment.CurrentDirectory, "trace.log"), false, Encoding.ASCII)));
         Timer timer = new(_ => Trace.Flush(), null, 0, 5000);

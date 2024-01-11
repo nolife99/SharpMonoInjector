@@ -9,9 +9,9 @@ using System.Diagnostics;
 
 namespace SharpMonoInjector.Gui.Views;
 
-public partial class MainWindow : Window
+partial class MainWindow : Window
 {
-    public MainWindow()
+    MainWindow()
     {
 #if RELEASE
         using (var id = WindowsIdentity.GetCurrent()) if (!new WindowsPrincipal(id).IsInRole((int)WindowsBuiltInRole.Administrator) && MessageBox.Show(

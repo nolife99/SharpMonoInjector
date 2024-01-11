@@ -7,7 +7,7 @@ using HarmonyLib;
 using Unity.Netcode;
 using UnityEngine;
 
-namespace LCHack;
+namespace LCHack.Scripting;
 
 [HarmonyPatch(typeof(HUDManager))]
 static class HUDManagerPatch
@@ -19,7 +19,8 @@ static class HUDManagerPatch
         return instructions;
     }
 
-    [HarmonyPatch("MeetsScanNodeRequirements")] [HarmonyPatch(new Type[] { typeof(ScanNodeProperties), typeof(PlayerControllerB) })]
+    [HarmonyPatch("MeetsScanNodeRequirements")]
+    [HarmonyPatch(new Type[] { typeof(ScanNodeProperties), typeof(PlayerControllerB) })]
     static bool Prefix(ref bool __result)
     {
         if (!Hacks.farScan) return true;
@@ -45,7 +46,8 @@ static class PlayerPatch
     [HarmonyPatch("KillPlayerClientRpc")]
     static bool Prefix(int playerId, bool spawnBody, Vector3 bodyVelocity, int causeOfDeath, int deathAnimation, PlayerControllerB __instance) => Display(playerId, causeOfDeath, __instance);
 
-    [HarmonyPrefix] [HarmonyPatch("KillPlayerServerRpc")]
+    [HarmonyPrefix]
+    [HarmonyPatch("KillPlayerServerRpc")]
     static bool _(int playerId, bool spawnBody, Vector3 bodyVelocity, int causeOfDeath, int deathAnimation, PlayerControllerB __instance) => Display(playerId, causeOfDeath, __instance);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

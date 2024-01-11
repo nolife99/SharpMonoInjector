@@ -1,10 +1,11 @@
 ﻿using System.Reflection;
 using System.Threading;
+using LCHack.Scripting;
 using UnityEngine;
 
 namespace LCHack;
 
-sealed class Loader
+static class Loader
 {
     static GameObject Load;
 

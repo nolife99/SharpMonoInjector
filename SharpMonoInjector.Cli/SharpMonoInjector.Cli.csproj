@@ -2,10 +2,10 @@
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <OutputType>Exe</OutputType>
-    <AssemblyName>smi</AssemblyName>
+    <AssemblyName>smi-cli</AssemblyName>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <AssemblyTitle>SharpMonoInjector.Console</AssemblyTitle>
-    <Product>SharpMonoInjector.Console</Product>
+    <AssemblyTitle>SharpMonoInjector.Cli</AssemblyTitle>
+    <Product>SharpMonoInjector.Cli</Product>
     <Copyright>Copyright © 2019</Copyright>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <FileVersion>1.0.0.0</FileVersion>

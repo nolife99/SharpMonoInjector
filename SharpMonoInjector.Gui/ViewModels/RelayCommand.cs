@@ -3,7 +3,7 @@ using System.Windows.Input;
 
 namespace SharpMonoInjector.Gui.ViewModels;
 
-public class RelayCommand(Action execute, Func<bool> canExecute = null) : ICommand
+internal class RelayCommand(Action execute, Func<bool> canExecute = null) : ICommand
 {
     public event EventHandler CanExecuteChanged;
 

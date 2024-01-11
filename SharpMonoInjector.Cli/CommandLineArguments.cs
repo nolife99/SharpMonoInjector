@@ -2,7 +2,7 @@
 using System.Globalization;
 using System.Linq;
 
-namespace SharpMonoInjector.Console;
+namespace SharpMonoInjector.Cli;
 
 public ref struct CommandLineArguments(string[] args)
 {

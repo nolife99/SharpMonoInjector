@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 
 namespace SharpMonoInjector.Gui.ViewModels;
 
-public abstract class ViewModel : INotifyPropertyChanged
+internal abstract class ViewModel : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler PropertyChanged;
 

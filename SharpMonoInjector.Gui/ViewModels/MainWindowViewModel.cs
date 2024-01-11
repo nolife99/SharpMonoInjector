@@ -11,7 +11,7 @@ using SharpMonoInjector.Gui.Models;
 
 namespace SharpMonoInjector.Gui.ViewModels;
 
-public partial class MainWindowViewModel : ViewModel
+internal sealed class MainWindowViewModel : ViewModel
 {
     public MainWindowViewModel()
     {
@@ -116,8 +116,8 @@ public partial class MainWindowViewModel : ViewModel
                 InjectedAssemblies = assemblies.RemoveAll(s => selectedProcess.Id == s.ProcessId);
                 Processes = processes.RemoveAll(p => selectedProcess.Id == p.Id);
 
-                if (assemblies.Count == 0) SelectedAssembly = default;
-                if (processes.Count == 0) SelectedProcess = default;
+                SelectedAssembly = assemblies.FirstOrDefault();
+                SelectedProcess = processes.FirstOrDefault();
             }
             catch (InjectorException e)
             {
@@ -152,8 +152,8 @@ public partial class MainWindowViewModel : ViewModel
                 InjectedAssemblies = assemblies.RemoveAll(s => selectedAssembly.ProcessId == s.ProcessId);
                 Processes = processes.RemoveAll(p => selectedAssembly.ProcessId == p.Id);
 
-                if (assemblies.Count == 0) SelectedAssembly = default;
-                if (processes.Count == 0) SelectedProcess = default;
+                SelectedAssembly = assemblies.FirstOrDefault();
+                SelectedProcess = processes.FirstOrDefault();
             }
             catch (InjectorException e)
             {
