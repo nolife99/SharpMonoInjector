@@ -26,15 +26,15 @@ internal partial class Hacks
     }
     static void ProcessPlayers()
     {
-        if (cache.TryGetValue(typeof(PlayerControllerB), out var source)) foreach (PlayerControllerB pl in source) if (!pl.IsLocalPlayer && pl.isPlayerControlled && WorldToScreen(pl.transform.position, out var screen))
-            DrawLabel(screen, pl.playerUsername + (pl.isPlayerDead ? " (Dead)" : " "), Color.green, pl.transform.position);
+        if (cache.TryGetValue(typeof(PlayerControllerB), out var source)) foreach (PlayerControllerB pl in source) if (!pl.isPlayerDead && !pl.IsLocalPlayer && pl.isPlayerControlled && WorldToScreen(pl.transform.position, out var screen))
+            DrawLabel(screen, pl.playerUsername + " ", Color.green, pl.transform.position);
     }
     static void ProcessEnemies()
     {
         if (cache.TryGetValue(typeof(EnemyAI), out var source))
         {
             enemyCount = source.Length;
-            foreach (EnemyAI e in source) if (WorldToScreen(e.transform.position, out var screen))
+            foreach (EnemyAI e in source) if (!e.isEnemyDead && WorldToScreen(e.transform.position, out var screen))
                 DrawLabel(screen, !string.IsNullOrWhiteSpace(e.enemyType.enemyName) ? e.enemyType.enemyName + " " : "Unknown Enemy ", Color.red, e.transform.position);
         }
         else enemyCount = 0;
