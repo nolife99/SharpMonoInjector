@@ -1,59 +1,63 @@
 ﻿using System;
 using System.Collections;
+using System.Runtime.CompilerServices;
 using GameNetcodeStuff;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
 namespace LCHack.Scripting;
 
 internal partial class Hacks
 {
-    static void CacheObjects<T>() => cache[typeof(T)] = FindObjectsByType(typeof(T), FindObjectsSortMode.None);
-    static void ProcessObjects<T>(Func<T, Vector3, string> labelBuilder, Color labelColor) where T : Component
+    static void CacheObjects(Type type) => cache[type] = FindObjectsByType(type, FindObjectsSortMode.None);
+    static void ProcessObjects<T>(Func<T, Vector3, string> labelBuilder, Color labelColor) where T : Component => CastAndIterate<T>(obj =>
     {
-        if (cache.TryGetValue(typeof(T), out var source)) foreach (T obj in source)
-        {
-            if (obj is GrabbableObject g && (g.isPocketed || g.isHeld || g.itemProperties.itemName is "clipboard" or "Sticky note") ||
-                obj is SteamValveHazard v && !v.triggerScript.interactable) continue;
+        if (obj is GrabbableObject g && (g.isPocketed || g.isHeld || g.itemProperties.itemName is "clipboard" or "Sticky note") ||
+            obj is SteamValveHazard v && !v.triggerScript.interactable) return;
 
-            if (obj is Terminal t && addMoneySignal)
-            {
-                t.groupCredits += addMoney;
-                if (!client.IsServer) t.SyncGroupCreditsServerRpc(t.groupCredits, t.numberOfItemsInDropship);
-                addMoneySignal = false;
-            }
-            if (WorldToScreen(obj.transform.position, out var screen)) DrawLabel(screen, labelBuilder(obj, screen), labelColor, obj.transform.position);
-        }
-    }
-    static void ProcessPlayers()
-    {
-        if (cache.TryGetValue(typeof(PlayerControllerB), out var source)) foreach (PlayerControllerB pl in source) if (!pl.isPlayerDead && !pl.IsLocalPlayer && pl.isPlayerControlled && WorldToScreen(pl.transform.position, out var screen))
-            DrawLabel(screen, pl.playerUsername + " ", Color.green, pl.transform.position);
-    }
-    static void ProcessEnemies()
-    {
-        if (cache.TryGetValue(typeof(EnemyAI), out var source))
+        if (obj is Terminal t && addMoneySignal)
         {
-            enemyCount = source.Length;
-            foreach (EnemyAI e in source) if (!e.isEnemyDead && WorldToScreen(e.transform.position, out var screen))
-                DrawLabel(screen, !string.IsNullOrWhiteSpace(e.enemyType.enemyName) ? e.enemyType.enemyName + " " : "Unknown Enemy ", Color.red, e.transform.position);
+            t.groupCredits += addMoney;
+            if (!client.IsServer) t.SyncGroupCreditsServerRpc(t.groupCredits, t.numberOfItemsInDropship);
+            addMoneySignal = false;
         }
-        else enemyCount = 0;
-    }
+        if (WorldToScreen(obj.transform.position, out var screen)) DrawLabel(in screen, labelBuilder(obj, screen), in labelColor, obj.transform.position);
+    });
+    static void ProcessPlayers() => CastAndIterate<PlayerControllerB>(pl =>
+    {
+        if (!pl.isPlayerDead && !pl.IsLocalPlayer && pl.isPlayerControlled && WorldToScreen(pl.transform.position, out var screen))
+            DrawLabel(in screen, pl.playerUsername + " ", Color.green, pl.transform.position);
+    });
+    static void ProcessEnemies() => enemyCount = CastAndIterate<EnemyAI>(e =>
+    {
+        if (!e.isEnemyDead && WorldToScreen(e.transform.position, out var screen))
+            DrawLabel(in screen, !string.IsNullOrWhiteSpace(e.enemyType.enemyName) ? e.enemyType.enemyName + " " : "Unknown Enemy ", Color.red, e.transform.position);
+    });
     static IEnumerator CacheRefreshRoutine()
     {
         while (true)
         {
-            cache.Clear();
-            CacheObjects<Terminal>();
-            CacheObjects<EntranceTeleport>();
-            CacheObjects<PlayerControllerB>();
-            CacheObjects<SteamValveHazard>();
-            CacheObjects<Landmine>();
-            CacheObjects<Turret>();
-            CacheObjects<EnemyAI>();
-            CacheObjects<GrabbableObject>();
+            CacheObjects(typeof(Terminal));
+            CacheObjects(typeof(EntranceTeleport));
+            CacheObjects(typeof(PlayerControllerB));
+            CacheObjects(typeof(SteamValveHazard));
+            CacheObjects(typeof(Landmine));
+            CacheObjects(typeof(Turret));
+            CacheObjects(typeof(EnemyAI));
+            CacheObjects(typeof(GrabbableObject));
 
             yield return new WaitForSeconds(4);
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static int CastAndIterate<T>(Action<T> action)
+    {
+        if (!cache.TryGetValue(typeof(T), out var array)) return 0;
+        ref readonly var actual = ref UnsafeUtility.As<Array, T[]>(ref array);
+
+        var length = actual.Length;
+        for (var i = 0; i < length; ++i) action(actual[i]);
+        return length;
     }
 }

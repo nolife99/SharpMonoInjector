@@ -19,8 +19,7 @@ static class HUDManagerPatch
         return instructions;
     }
 
-    [HarmonyPatch("MeetsScanNodeRequirements")]
-    [HarmonyPatch(new Type[] { typeof(ScanNodeProperties), typeof(PlayerControllerB) })]
+    [HarmonyPatch("MeetsScanNodeRequirements", [typeof(ScanNodeProperties), typeof(PlayerControllerB)])]
     static bool Prefix(ref bool __result)
     {
         if (!Hacks.farScan) return true;
@@ -44,14 +43,13 @@ static class PlayerPatch
     }
 
     [HarmonyPatch("KillPlayerClientRpc")]
-    static bool Prefix(int playerId, bool spawnBody, Vector3 bodyVelocity, int causeOfDeath, int deathAnimation, PlayerControllerB __instance) => Display(playerId, causeOfDeath, __instance);
+    static bool Prefix(int playerId, bool spawnBody, Vector3 bodyVelocity, int causeOfDeath, int deathAnimation, PlayerControllerB __instance) => Display(ref playerId, ref causeOfDeath, __instance);
 
-    [HarmonyPrefix]
-    [HarmonyPatch("KillPlayerServerRpc")]
-    static bool _(int playerId, bool spawnBody, Vector3 bodyVelocity, int causeOfDeath, int deathAnimation, PlayerControllerB __instance) => Display(playerId, causeOfDeath, __instance);
+    [HarmonyPrefix] [HarmonyPatch("KillPlayerServerRpc")]
+    static bool _(int playerId, bool spawnBody, Vector3 bodyVelocity, int causeOfDeath, int deathAnimation, PlayerControllerB __instance) => Display(ref playerId, ref causeOfDeath, __instance);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static bool Display(int id, int causeOfDeath, PlayerControllerB p)
+    static bool Display(ref readonly int id, ref readonly int causeOfDeath, PlayerControllerB p)
     {
         HUDManager.Instance.DisplayTip("Player dead", $"{p.playersManager.allPlayerObjects[id].GetComponent<PlayerControllerB>().playerUsername} has died. Cause of death: {(CauseOfDeath)causeOfDeath}");
         return true;

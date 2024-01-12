@@ -34,7 +34,7 @@ static class Program
         }
         Injector injector;
 
-        if (cla.GetIntArg("-p", out int pid)) injector = new(pid);
+        if (cla.GetIntArg("-p", out int pid)) injector = new(in pid);
         else if (cla.GetStringArg("-p", out var pname)) injector = new(pname);
         else
         {
@@ -42,8 +42,8 @@ static class Program
             return;
         }
 
-        if (inject) Inject(injector, cla);
-        else Eject(injector, cla);
+        if (inject) Inject(ref injector, cla);
+        else Eject(ref injector, cla);
     }
 
     static void PrintHelp()
@@ -65,7 +65,7 @@ static class Program
         Console.WriteLine(help);
     }
 
-    static void Inject(Injector injector, CommandLineArguments args)
+    static void Inject(ref Injector injector, CommandLineArguments args)
     {
         byte[] assembly;
         if (args.GetStringArg("-a", out var assemblyPath)) try
@@ -116,7 +116,7 @@ static class Program
         }
     }
 
-    static void Eject(Injector injector, CommandLineArguments args)
+    static void Eject(ref Injector injector, CommandLineArguments args)
     {
         nint assembly;
 
@@ -142,7 +142,7 @@ static class Program
 
         using (injector) try
         {
-            injector.Eject(assembly, @namespace, className, methodName);
+            injector.Eject(in assembly, @namespace, className, methodName);
             Console.WriteLine("Ejection successful");
         }
         catch (InjectorException ie)

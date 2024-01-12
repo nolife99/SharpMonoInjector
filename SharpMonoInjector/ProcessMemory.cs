@@ -1,9 +1,9 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -13,7 +13,7 @@ public sealed class ProcessMemory(Process process) : IDisposable
 {
     readonly List<(nint, int)> allocs = [];
 
-    public string ReadString(nint addr, int length, Encoding encoding)
+    public string ReadString(in nint addr, int length, Encoding encoding)
     {
         Span<byte> bytes = stackalloc byte[length];
         for (var i = 0; i < length; ++i)
@@ -28,7 +28,7 @@ public sealed class ProcessMemory(Process process) : IDisposable
         }
         return encoding.GetString(bytes[..length]);
     }
-    public unsafe T Read<T>(nint addr) where T : unmanaged
+    public unsafe T Read<T>(in nint addr) where T : unmanaged
     {
         T ret;
         if (!Native.ReadProcessMemory(process.SafeHandle, addr, (nint)(&ret), sizeof(T))) throw new InjectorException("Failed to read process memory", new Win32Exception());
@@ -41,10 +41,24 @@ public sealed class ProcessMemory(Process process) : IDisposable
         Write(addr, data);
         return addr;
     }
-    public nint AllocateAndWrite(ReadOnlySpan<char> data) => AllocateAndWrite(Encoding.ASCII.GetBytes(data.ToArray()));
-    public nint AllocateAndWrite<T>(T data) where T : unmanaged => AllocateAndWrite(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, byte>(ref data), Unsafe.SizeOf<T>()));
+    public nint AllocateAndWrite(ReadOnlySpan<char> data)
+    {
+        var chars = ArrayPool<char>.Shared.Rent(data.Length);
+        data.CopyTo(chars);
 
-    public nint Allocate(int size)
+        var buffer = ArrayPool<byte>.Shared.Rent(Encoding.ASCII.GetByteCount(chars, 0, data.Length));
+        try
+        {
+            var length = Encoding.ASCII.GetBytes(chars, 0, data.Length, buffer, 0);
+            return AllocateAndWrite(MemoryMarshal.CreateReadOnlySpan(ref MemoryMarshal.GetArrayDataReference(buffer), length));
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(chars);
+            ArrayPool<byte>.Shared.Return(buffer); 
+        }
+    }
+    public nint Allocate(in int size)
     {
         var addr = Native.VirtualAllocEx(process.SafeHandle, 0, size, 0x00001000, 0x40);
         if (addr == 0) throw new InjectorException("Failed to allocate process memory", new Win32Exception());
@@ -52,7 +66,7 @@ public sealed class ProcessMemory(Process process) : IDisposable
         allocs.Add((addr, size));
         return addr;
     }
-    public unsafe void Write(nint addr, ReadOnlySpan<byte> data)
+    public unsafe void Write(in nint addr, ReadOnlySpan<byte> data)
     {
         fixed (void* ptr = data) if (!Native.WriteProcessMemory(process.SafeHandle, addr, (nint)ptr, data.Length)) throw new InjectorException("Failed to write process memory", new Win32Exception());
     }

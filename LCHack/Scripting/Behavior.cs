@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace LCHack.Scripting;
 
-internal partial class Hacks : MonoBehaviour
+internal sealed partial class Hacks : MonoBehaviour
 {
     void Start()
     {

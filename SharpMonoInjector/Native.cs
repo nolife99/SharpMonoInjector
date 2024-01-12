@@ -18,10 +18,6 @@ public static class Native
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static extern int GetModuleFileNameExA(SafeProcessHandle hProcess, nint hModule, nint lpBaseName, int nSize);
 
-    [DllImport("psapi", SetLastError = true)]
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static extern bool GetModuleInformation(SafeProcessHandle hProcess, nint hModule, out nint lpmodinfo, int cb);
-
     [DllImport("kernel32", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static extern nint CreateRemoteThread(SafeProcessHandle hProcess, nint lpThreadAttributes, int dwStackSize, nint lpStartAddress, nint lpParameter, int dwCreationFlags, out int lpThreadId);
@@ -29,10 +25,6 @@ public static class Native
     [DllImport("kernel32", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static extern uint WaitForSingleObject(nint hHandle, int dwMilliseconds);
-
-    [DllImport("kernel32", SetLastError = true)]
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static extern bool IsWow64Process2(SafeProcessHandle hProcess, out ushort processMachine, out ushort nativeMachine);
 
     [DllImport("kernel32", SetLastError = true)]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

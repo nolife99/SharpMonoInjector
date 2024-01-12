@@ -278,6 +278,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
         <Style x:Key="{x:Type ScrollBar}" TargetType="{x:Type ScrollBar}">
             <Setter Property="Stylus.IsFlicksEnabled" Value="false" />
             <Setter Property="Foreground" Value="{StaticResource ComboBox.Static.Glyph}" />

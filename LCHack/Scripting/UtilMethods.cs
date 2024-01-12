@@ -24,7 +24,7 @@ internal partial class Hacks
     static PlayerControllerB client;
     static MethodBase setLevel;
 
-    static bool WorldToScreen(Vector3 world, out Vector3 screen)
+    static bool WorldToScreen(in Vector3 world, out Vector3 screen)
     {
         screen = client.gameplayCamera.WorldToViewportPoint(world);
         var visible = screen.x > 0 && screen.x < 1 && screen.y > 0 && screen.y < 1 && screen.z > 0;
@@ -35,7 +35,7 @@ internal partial class Hacks
 
         return visible;
     }
-    static void DrawLabel(Vector3 screen, string text, Color color, Vector3 distObj)
+    static void DrawLabel(in Vector3 screen, string text, in Color color, in Vector3 distObj)
     {
         GUI.contentColor = color;
         GUI.Label(new(screen, new(75, 50)), $"{text}{Vector3.Distance(client.transform.position, distObj):n0} ft");

@@ -5,7 +5,7 @@ using SharpMonoInjector.Gui.Models;
 
 namespace SharpMonoInjector.Gui.Converters;
 
-public class InjectedAssemblyToStringConverter : IValueConverter
+public readonly struct InjectedAssemblyToStringConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {

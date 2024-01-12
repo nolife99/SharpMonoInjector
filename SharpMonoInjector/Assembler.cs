@@ -11,68 +11,72 @@ public readonly ref struct Assembler
     public Assembler() => ops = [];
 
     public void CallRax() => AddStack([0xFF, 0xD0]);
-    public void MovRax(nint arg)
+    public void MovRax(in nint arg)
     {
         AddStack([0x48, 0xB8]);
-        AddArgAsBytes(ref arg);
+        AddArgAsBytes(in arg);
     }
-    public void MovRaxTo(nint arg)
+    public void MovRaxTo(in nint arg)
     {
         AddStack([0x48, 0xA3]);
-        AddArgAsBytes(ref arg);
+        AddArgAsBytes(in arg);
     }
-    public void MovRcx(nint arg)
+    public void MovRcx(in nint arg)
     {
         AddStack([0x48, 0xB9]);
-        AddArgAsBytes(ref arg);
+        AddArgAsBytes(in arg);
     }
-    public void MovRdx(nint arg)
+    public void MovRdx(in nint arg)
     {
         AddStack([0x48, 0xBA]);
-        AddArgAsBytes(ref arg);
+        AddArgAsBytes(in arg);
     }
 
     public void CallEax() => AddStack([0xFF, 0xD0]);
-    public void MovEax(nint arg)
+    public unsafe void MovEax(in nint arg)
     {
         ops.Add(0xB8);
-        AddArgAsBytes(ref Unsafe.As<nint, int>(ref arg));
+        AddArgAsBytes(in Unsafe.AsRef<int>((void*)arg));
     }
-    public void MovEaxTo(nint arg)
+    public void MovEaxTo(in nint arg)
     {
         ops.Add(0xA3);
-        AddArgAsBytes(ref arg);
+        AddArgAsBytes(in arg);
     }
-    public void MovR8(nint arg)
+    public void MovR8(in nint arg)
     {
         AddStack([0x49, 0xB8]);
-        AddArgAsBytes(ref arg);
+        AddArgAsBytes(in arg);
     }
-    public void MovR9(nint arg)
+    public void MovR9(in nint arg)
     {
         AddStack([0x49, 0xB9]);
-        AddArgAsBytes(ref arg);
+        AddArgAsBytes(in arg);
     }
 
-    public void SubRsp(byte arg) => AddStack([0x48, 0x83, 0xEC, arg]);
-    public void AddRsp(byte arg) => AddStack([0x48, 0x83, 0xC4, arg]);
-    public void AddEsp(byte arg) => AddStack([0x83, 0xC4, arg]);
+    public void SubRsp(in byte arg) => AddStack([0x48, 0x83, 0xEC, arg]);
+    public void AddRsp(in byte arg) => AddStack([0x48, 0x83, 0xC4, arg]);
+    public void AddEsp(in byte arg) => AddStack([0x83, 0xC4, arg]);
 
-    public void Push(nint arg)
+    public unsafe void Push(in nint arg)
     {
-        ref var intArg = ref Unsafe.As<nint, int>(ref arg);
-        ops.Add(intArg < 128 ? (byte)0x6A : (byte)0x68);
+        var ptr = (void*)arg;
+        ref readonly var intArg = ref Unsafe.AsRef<int>(ptr);
 
-        if (intArg > 255) AddArgAsBytes(ref intArg);
-        else ops.Add(Unsafe.As<nint, byte>(ref arg));
+        ops.Add(intArg < 128 ? (byte)0x6A : (byte)0x68);
+        if (intArg > 255) AddArgAsBytes(in intArg);
+        else ops.Add(Unsafe.AsRef<byte>(ptr));
     }
 
     public void Return() => ops.Add(0xC3);
     public ReadOnlySpan<byte> Compile() => CollectionsMarshal.AsSpan(ops);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void AddArgAsBytes<T>(ref T arg) => AddStack(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, byte>(ref arg), Unsafe.SizeOf<T>()));
+    unsafe void AddArgAsBytes<T>(in T arg) where T : unmanaged
+    {
+        fixed (void* ptr = &arg) AddStack(new(ptr, sizeof(T)));
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void AddStack(ReadOnlySpan<byte> arg) => ops.AddRange(arg);
+    void AddStack(in ReadOnlySpan<byte> arg) => ops.AddRange(arg);
 }

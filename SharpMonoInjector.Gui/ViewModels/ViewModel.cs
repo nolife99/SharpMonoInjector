@@ -8,7 +8,7 @@ internal abstract class ViewModel : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler PropertyChanged;
 
-    protected void Set<T>(ref T property, T value, [CallerMemberName] string name = null)
+    protected void Set<T>(ref T property, in T value, [CallerMemberName] string name = null)
     {
         if (!EqualityComparer<T>.Default.Equals(property, value))
         {

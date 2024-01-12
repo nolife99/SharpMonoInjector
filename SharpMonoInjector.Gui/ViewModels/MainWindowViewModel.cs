@@ -183,7 +183,7 @@ internal sealed class MainWindowViewModel : ViewModel
         get => isRefreshing;
         set
         {
-            Set(ref isRefreshing, value);
+            Set(ref isRefreshing, in value);
             RefreshCommand.RaiseCanExecuteChanged();
         }
     }
@@ -194,7 +194,7 @@ internal sealed class MainWindowViewModel : ViewModel
         get => isExecuting;
         set
         {
-            Set(ref isExecuting, value);
+            Set(ref isExecuting, in value);
             InjectCommand.RaiseCanExecuteChanged();
             EjectCommand.RaiseCanExecuteChanged();
         }
@@ -204,7 +204,7 @@ internal sealed class MainWindowViewModel : ViewModel
     public ImmutableList<MonoProcess> Processes
     {
         get => processes;
-        set => Set(ref processes, value);
+        set => Set(ref processes, in value);
     }
 
     MonoProcess selectedProcess;
@@ -222,21 +222,21 @@ internal sealed class MainWindowViewModel : ViewModel
     public string Status
     {
         get => status;
-        set => Set(ref status, value);
+        set => Set(ref status, in value);
     }
 
     bool avalert;
     public bool AVAlert
     {
         get => avalert;
-        set => Set(ref avalert, value);
+        set => Set(ref avalert, in value);
     }
 
     string avcolor;
     public string AVColor
     {
         get => avcolor;
-        set => Set(ref avcolor, value);
+        set => Set(ref avcolor, in value);
     }
 
     string assemblyPath;
@@ -245,7 +245,7 @@ internal sealed class MainWindowViewModel : ViewModel
         get => assemblyPath;
         set
         {
-            Set(ref assemblyPath, value);
+            Set(ref assemblyPath, in value);
             if (File.Exists(assemblyPath)) InjectNamespace = Path.GetFileNameWithoutExtension(assemblyPath);
             InjectCommand.RaiseCanExecuteChanged();
         }
@@ -257,7 +257,7 @@ internal sealed class MainWindowViewModel : ViewModel
         get => injectNamespace;
         set
         {
-            Set(ref injectNamespace, value);
+            Set(ref injectNamespace, in value);
             EjectNamespace = value;
         }
     }
@@ -268,7 +268,7 @@ internal sealed class MainWindowViewModel : ViewModel
         get => injectClassName;
         set
         {
-            Set(ref injectClassName, value);
+            Set(ref injectClassName, in value);
             EjectClassName = value;
             InjectCommand.RaiseCanExecuteChanged();
         }
@@ -280,7 +280,7 @@ internal sealed class MainWindowViewModel : ViewModel
         get => injectMethodName;
         set
         {
-            Set(ref injectMethodName, value);
+            Set(ref injectMethodName, in value);
             if (injectMethodName == "Load") EjectMethodName = "Unload";
             InjectCommand.RaiseCanExecuteChanged();
         }
@@ -290,7 +290,7 @@ internal sealed class MainWindowViewModel : ViewModel
     public ImmutableList<InjectedAssembly> InjectedAssemblies
     {
         get => assemblies;
-        set => Set(ref assemblies, value);
+        set => Set(ref assemblies, in value);
     }
 
     InjectedAssembly selectedAssembly;
@@ -299,7 +299,7 @@ internal sealed class MainWindowViewModel : ViewModel
         get => selectedAssembly;
         set
         {
-            Set(ref selectedAssembly, value);
+            Set(ref selectedAssembly, in value);
             EjectCommand.RaiseCanExecuteChanged();
         }
     }
@@ -308,7 +308,7 @@ internal sealed class MainWindowViewModel : ViewModel
     public string EjectNamespace
     {
         get => ejectNamespace;
-        set => Set(ref ejectNamespace, value);
+        set => Set(ref ejectNamespace, in value);
     }
 
     string ejectClassName;
@@ -317,7 +317,7 @@ internal sealed class MainWindowViewModel : ViewModel
         get => ejectClassName;
         set
         {
-            Set(ref ejectClassName, value);
+            Set(ref ejectClassName, in value);
             EjectCommand.RaiseCanExecuteChanged();
         }
     }
@@ -328,7 +328,7 @@ internal sealed class MainWindowViewModel : ViewModel
         get => ejectMethodName;
         set
         {
-            Set(ref ejectMethodName, value);
+            Set(ref ejectMethodName, in value);
             EjectCommand.RaiseCanExecuteChanged();
         }
     }
@@ -346,7 +346,7 @@ internal sealed class MainWindowViewModel : ViewModel
         }
         catch (Exception e)
         {
-            Trace.WriteLine(string.Concat("\tError getting user process: ", process.ProcessName, " - ", e.Message));
+            Trace.WriteLine($"\tError getting user process: {process.ProcessName} - {e.Message}");
             return false;
         }
     }
